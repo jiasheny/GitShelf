@@ -124,27 +124,42 @@ function UploadSection({ repo, disabled }) {
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const uploadingRef = useRef(false);
   let dragCounter = 0;
   const acceptedExtensionsLabel = ACCEPTED_EXTENSIONS.map((ext) => `.${ext}`).join(',');
   const acceptedExtensionsText = ACCEPTED_EXTENSIONS.map((ext) => `.${ext}`).join(', ');
 
   const handleFile = async (file) => {
-    if (!file || disabled) return;
+    if (!file || disabled || uploadingRef.current) return;
+    uploadingRef.current = true;
     setError('');
     const ext = file.name.split('.').pop().toLowerCase();
     if (!ACCEPTED_EXTENSIONS.includes(ext)) {
       setError(`Only ${acceptedExtensionsText} files are accepted.`);
+      uploadingRef.current = false;
       return;
     }
-    if (file.size > MAX_FILE_SIZE) { setError(`File too large (${formatBytes(file.size)}). Max 100 MB.`); return; }
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large (${formatBytes(file.size)}). Max 100 MB.`);
+      uploadingRef.current = false;
+      return;
+    }
     try {
-      await apiUploadContent(file, repo, (stage, msg) => setProgress({ stage, msg }));
-      setProgress({ stage: 'done', msg: 'uploaded', filename: file.name });
+      await apiUploadContent(file, repo, (stage, msg, details = {}) => {
+        setProgress({ stage, msg, filename: file.name, fileSize: file.size, ...details });
+      });
+      setProgress({ stage: 'done', msg: 'uploaded', filename: file.name, fileSize: file.size, percent: 100 });
       showToast('Content uploaded successfully', 'success');
-    } catch (err) { setError(err.message); setProgress({ stage: 'error', msg: 'Upload failed.' }); }
+    } catch (err) {
+      setError(err.message);
+      setProgress({ stage: 'error', msg: 'Upload failed.', filename: file.name, fileSize: file.size, percent: 0 });
+    } finally {
+      uploadingRef.current = false;
+    }
   };
 
-  const toneMap = { reading: 'info', committing: 'info', done: 'success', error: 'error' };
+  const toneMap = { reading: 'info', preparing: 'info', uploading: 'info', done: 'success', error: 'error' };
+  const uploading = progress && !['done', 'error'].includes(progress.stage);
   const actionsUrl = repo.owner && repo.name ? `https://github.com/${repo.owner}/${repo.name}/actions` : null;
 
   return (
@@ -159,11 +174,19 @@ function UploadSection({ repo, disabled }) {
         </div>
       ) : (
         <div
-          class={`upload-dropzone${dragOver ? ' upload-dropzone--dragover' : ''}`}
+          class={`upload-dropzone${dragOver ? ' upload-dropzone--dragover' : ''}${uploading ? ' upload-dropzone--disabled' : ''}`}
           role="button"
           tabIndex="0"
           aria-label="Upload content file"
-          onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = acceptedExtensionsLabel; i.onchange = () => handleFile(i.files[0]); i.click(); }}
+          aria-disabled={uploading ? 'true' : 'false'}
+          onClick={() => {
+            if (uploading) return;
+            const i = document.createElement('input');
+            i.type = 'file';
+            i.accept = acceptedExtensionsLabel;
+            i.onchange = () => handleFile(i.files[0]);
+            i.click();
+          }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); }}}
           onDragEnter={(e) => { e.preventDefault(); dragCounter++; setDragOver(true); }}
           onDragOver={(e) => e.preventDefault()}
@@ -183,7 +206,19 @@ function UploadSection({ repo, disabled }) {
           <a class="upload-progress-link" href={actionsUrl} target="_blank" rel="noopener noreferrer">View conversion progress</a>
         </div>
       ) : progress ? (
-        <div class={`upload-progress upload-progress--${toneMap[progress.stage] || 'info'}`}>{progress.msg}</div>
+        <div class={`upload-progress upload-progress--${toneMap[progress.stage] || 'info'}`} aria-live="polite">
+          <div class="upload-progress-header">
+            <strong>{progress.filename}</strong>
+            <span>{progress.fileSize ? formatBytes(progress.fileSize) : ''}</span>
+          </div>
+          <div class="progress-bar" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress.percent || 0}>
+            <div class="progress-bar-fill" style={{ width: `${progress.percent || 0}%` }} />
+          </div>
+          <div class="upload-progress-details">
+            <span>{progress.msg}</span>
+            <strong>{progress.percent || 0}%</strong>
+          </div>
+        </div>
       ) : null}
       {error && <p class="admin-error">{error}</p>}
     </section>
