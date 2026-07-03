@@ -61,6 +61,36 @@ export async function githubApi(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+function githubUpload(path, body, onUploadProgress) {
+  const pat = getPat();
+  if (!pat) return Promise.reject(new Error('No GitHub PAT configured'));
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', `${GITHUB_API_BASE}${path}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${pat}`);
+    xhr.setRequestHeader('Accept', 'application/vnd.github.v3+json');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && typeof onUploadProgress === 'function') {
+        onUploadProgress(event.loaded, event.total);
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error while uploading to GitHub.'));
+    xhr.onabort = () => reject(new Error('Upload cancelled.'));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText ? JSON.parse(xhr.responseText) : null);
+      } else if (xhr.status === 401) {
+        reject(new Error('Authentication failed. Please check your PAT.'));
+      } else {
+        reject(new Error(`GitHub API error ${xhr.status} on ${path}: ${xhr.responseText}`));
+      }
+    };
+    xhr.send(JSON.stringify(body));
+  });
+}
+
 export async function verifyPat() {
   return githubApi('/user');
 }
@@ -248,14 +278,21 @@ export async function uploadContent(file, repo, onProgress) {
   if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (max 100 MB).`);
   const ext = file.name.split('.').pop().toLowerCase();
   if (!ACCEPTED_EXTENSIONS.includes(ext)) throw new Error(`Unsupported file type. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
-  onProgress('reading', `Reading ${file.name}...`);
+  onProgress('reading', `Reading ${file.name}...`, { percent: 0 });
   const base64 = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(typeof r.result === 'string' ? r.result.split(',')[1] : '');
     r.onerror = () => reject(new Error('Failed to read file.'));
+    r.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress('reading', `Reading ${file.name}...`, {
+          percent: Math.round((event.loaded / event.total) * 20),
+        });
+      }
+    };
     r.readAsDataURL(file);
   });
-  onProgress('committing', `Committing to input/${file.name}...`);
+  onProgress('preparing', 'Preparing GitHub upload...', { percent: 20 });
   const filePath = `input/${encodeURIComponent(file.name)}`;
   let sha;
   try {
@@ -264,10 +301,15 @@ export async function uploadContent(file, repo, onProgress) {
   } catch { /* file doesn't exist yet */ }
   const body = { message: `feat(pipeline): upload ${file.name}`, content: base64 };
   if (sha) body.sha = sha;
-  await githubApi(`/repos/${repo.owner}/${repo.name}/contents/${filePath}`, {
-    method: 'PUT', body: JSON.stringify(body),
+  onProgress('uploading', 'Uploading to GitHub... 0%', { percent: 25, uploadPercent: 0 });
+  await githubUpload(`/repos/${repo.owner}/${repo.name}/contents/${filePath}`, body, (loaded, total) => {
+    const uploadPercent = Math.round((loaded / total) * 100);
+    onProgress('uploading', `Uploading to GitHub... ${uploadPercent}%`, {
+      percent: 25 + Math.round(uploadPercent * 0.7),
+      uploadPercent,
+    });
   });
-  onProgress('done', 'Upload complete.');
+  onProgress('done', 'Upload complete.', { percent: 100 });
 }
 
 export async function triggerReconvert(item, repo, { clearCache = false } = {}) {
