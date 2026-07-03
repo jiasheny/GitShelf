@@ -62,5 +62,14 @@ jobs:
           else
             CHANGED=$(git diff --cached --name-only -- docs/ | head -1 | sed 's|docs/||;s|/.*||')
             git commit -m "feat(pipeline): process ${CHANGED:-content}"
-            git push
+            for attempt in 1 2 3; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then
+                exit 0
+              fi
+              echo "Push attempt ${attempt} failed; retrying after syncing main..."
+              sleep $((attempt * 2))
+            done
+            echo "Failed to push processed content after 3 attempts"
+            exit 1
           fi
