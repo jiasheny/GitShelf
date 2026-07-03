@@ -1,0 +1,576 @@
+{
+  "title": "Fire-FireSmoke-Dampers-andMaintenance-IMEG",
+  "children": [
+    {
+      "title": "FIRE AND FIRE SMOKE DAMPERS DESIGN AND MAINTENANCE PRESENTED BY PAUL VANDUYNE JR, PE",
+      "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+      "children": [
+        {
+          "title": "AIMEG",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "aimeg"
+        },
+        {
+          "title": "AGENDA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "agenda"
+        },
+        {
+          "title": "Agenda",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "agenda"
+        },
+        {
+          "title": "WHAT ARE THEY",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they"
+        },
+        {
+          "title": "What Are They?",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they"
+        },
+        {
+          "title": "What Are They? – Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-fire-dampers"
+        },
+        {
+          "title": "Fire Dampers:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-dampers"
+        },
+        {
+          "title": "What Are They? – Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-fire-dampers"
+        },
+        {
+          "title": "Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-dampers"
+        },
+        {
+          "title": "What Are They? – Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-fire-dampers"
+        },
+        {
+          "title": "Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-dampers"
+        },
+        {
+          "title": "What Are They? – Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-fire-dampers"
+        },
+        {
+          "title": "Fire Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-dampers"
+        },
+        {
+          "title": "What Are They? – Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-smoke-dampers"
+        },
+        {
+          "title": "Smoke Dampers:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "smoke-dampers"
+        },
+        {
+          "title": "What Are They? – Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-smoke-dampers"
+        },
+        {
+          "title": "Smoke Dampers:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "smoke-dampers"
+        },
+        {
+          "title": "What Are They? – Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-smoke-dampers"
+        },
+        {
+          "title": "Smoke Dampers:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "smoke-dampers"
+        },
+        {
+          "title": "• Triple V-Groove",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "triple-v-groove"
+        },
+        {
+          "title": "• Modified single skin",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "modified-single-skin"
+        },
+        {
+          "title": "What Are They? – Fire/Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-fire-smoke-dampers"
+        },
+        {
+          "title": "Fire/Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-smoke-dampers"
+        },
+        {
+          "title": "Fire/Smoke Dampers:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-smoke-dampers"
+        },
+        {
+          "title": "What Are They? – Control/Fire/Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "what-are-they-control-fire-smoke-dampers"
+        },
+        {
+          "title": "Control/Fire/Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "control-fire-smoke-dampers"
+        },
+        {
+          "title": "Control/Fire/Smoke Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "control-fire-smoke-dampers"
+        },
+        {
+          "title": "CODES",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes"
+        },
+        {
+          "title": "Codes",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes"
+        },
+        {
+          "title": "Codes – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "Codes - IMC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-imc"
+        },
+        {
+          "title": "IMC: International Mechanical Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "imc-international-mechanical-code-wisconsin"
+        },
+        {
+          "title": "Codes - IFC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-ifc"
+        },
+        {
+          "title": "IFC: International Fire Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ifc-international-fire-code"
+        },
+        {
+          "title": "Codes – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-nfpa-90a"
+        },
+        {
+          "title": "NFPA 90A: Standard for the Installation of Air-Conditioning and Ventilating Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-90a-standard-for-the-installation-of-air-conditioning-and-ventilating-systems"
+        },
+        {
+          "title": "Codes – NFPA 92",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-nfpa-92"
+        },
+        {
+          "title": "NFPA 92: Smoke Control Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-92-smoke-control-systems"
+        },
+        {
+          "title": "Codes – NFPA 92",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-nfpa-92"
+        },
+        {
+          "title": "NFPA 101: Life Safety Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-101-life-safety-code"
+        },
+        {
+          "title": "Codes – NFPA 105",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "codes-nfpa-105"
+        },
+        {
+          "title": "DESIGN AND LAYOUT",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout"
+        },
+        {
+          "title": "Design and Layout",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout"
+        },
+        {
+          "title": "Design and Layout – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "Design and Layout – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "• Chapter 7:",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "chapter-7"
+        },
+        {
+          "title": "Design and Layout – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "Design and Layout – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "Design and Layout - IMC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-imc"
+        },
+        {
+          "title": "IMC: International Mechanical Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "imc-international-mechanical-code-wisconsin"
+        },
+        {
+          "title": "Design and Layout - IMC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-imc"
+        },
+        {
+          "title": "IMC: International Mechanical Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "imc-international-mechanical-code-wisconsin"
+        },
+        {
+          "title": "Design and Layout - IFC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-ifc"
+        },
+        {
+          "title": "IFC: International Fire Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ifc-international-fire-code"
+        },
+        {
+          "title": "Design and Layout – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-nfpa-90a"
+        },
+        {
+          "title": "NFPA 90A: Standard for the Installation of Air-Conditioning and Ventilating Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-90a-standard-for-the-installation-of-air-conditioning-and-ventilating-systems"
+        },
+        {
+          "title": "Design and Layout – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-nfpa-90a"
+        },
+        {
+          "title": "NFPA 90A: Standard for the Installation of Air-Conditioning and Ventilating Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-90a-standard-for-the-installation-of-air-conditioning-and-ventilating-systems"
+        },
+        {
+          "title": "Design and Layout – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-nfpa-90a"
+        },
+        {
+          "title": "Design and Layout – NFPA 101",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-nfpa-101"
+        },
+        {
+          "title": "NFPA 101: LIFE SAFETY CODE",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-101-life-safety-code"
+        },
+        {
+          "title": "Design and Layout – SD Operation",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-sd-operation"
+        },
+        {
+          "title": "System Operation",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "system-operation"
+        },
+        {
+          "title": "Design and Layout – SD Operation",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "design-and-layout-sd-operation"
+        },
+        {
+          "title": "System Operation",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "system-operation"
+        },
+        {
+          "title": "MAINTENANCE AND TESTING",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-and-testing"
+        },
+        {
+          "title": "Maintenance and Testing",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-and-testing"
+        },
+        {
+          "title": "Maintenance & Testing – IBC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-ibc"
+        },
+        {
+          "title": "IBC: International Building Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ibc-international-building-code-wisconsin"
+        },
+        {
+          "title": "Maintenance & Testing - IMC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-imc"
+        },
+        {
+          "title": "IMC: International Mechanical Code (+ Wisconsin)",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "imc-international-mechanical-code-wisconsin"
+        },
+        {
+          "title": "Maintenance & Testing - IFC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-ifc"
+        },
+        {
+          "title": "IFC: International Fire Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ifc-international-fire-code"
+        },
+        {
+          "title": "Maintenance & Testing – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-nfpa-90a"
+        },
+        {
+          "title": "NFPA 90A: Standard for the Installation of Air-Conditioning and Ventilating Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-90a-standard-for-the-installation-of-air-conditioning-and-ventilating-systems"
+        },
+        {
+          "title": "Maintenance & Testing – NFPA 92",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-nfpa-92"
+        },
+        {
+          "title": "NFPA 92: Smoke Control Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-92-smoke-control-systems"
+        },
+        {
+          "title": "Maintenance & Testing – NFPA 105",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-nfpa-105"
+        },
+        {
+          "title": "NFPA 105: Smoke Door Assemblies And Other Opening Protectives",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-105-smoke-door-assemblies-and-other-opening-protectives"
+        },
+        {
+          "title": "Maintenance & Testing – NFPA 105",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-nfpa-105"
+        },
+        {
+          "title": "NFPA 105: Smoke Door Assemblies And Other Opening Protectives",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-105-smoke-door-assemblies-and-other-opening-protectives"
+        },
+        {
+          "title": "Maintenance & Testing – NFPA 105",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-nfpa-105"
+        },
+        {
+          "title": "NFPA 105: Smoke Door Assemblies And Other Opening Protectives",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-105-smoke-door-assemblies-and-other-opening-protectives"
+        },
+        {
+          "title": "Maintenance & Testing – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "Maintenance & Testing – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "Maintenance & Testing – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "Maintenance & Testing – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "Maintenance & Testing – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "maintenance-testing-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "FREQUENCY",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency"
+        },
+        {
+          "title": "Frequency",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency"
+        },
+        {
+          "title": "IFC: International Fire Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ifc-international-fire-code"
+        },
+        {
+          "title": "Frequency - IFC",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency-ifc"
+        },
+        {
+          "title": "IFC: International Fire Code",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "ifc-international-fire-code"
+        },
+        {
+          "title": "Frequency – NFPA 90A",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency-nfpa-90a"
+        },
+        {
+          "title": "NFPA 90A:Standard for the Installation of Air-Conditioning and Ventilating Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-90a-standard-for-the-installation-of-air-conditioning-and-ventilating-systems"
+        },
+        {
+          "title": "Frequency – NFPA 92",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency-nfpa-92"
+        },
+        {
+          "title": "NFPA 92 –Smoke Control Systems",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-92-smoke-control-systems"
+        },
+        {
+          "title": "Frequency – NFPA 105",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency-nfpa-105"
+        },
+        {
+          "title": "NFPA 105: Smoke Door Assemblies And Other Opening Protectives",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "nfpa-105-smoke-door-assemblies-and-other-opening-protectives"
+        },
+        {
+          "title": "Frequency – AMCA",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "frequency-amca"
+        },
+        {
+          "title": "AMCA: Guide for Commissioning and Periodic Performance Testing of Fire, Smoke and Other Life Safety Related Dampers",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "amca-guide-for-commissioning-and-periodic-performance-testing-of-fire-smoke-and-other-life-safety-related-dampers"
+        },
+        {
+          "title": "QUESTIONS/DISCUSSION",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "questions-discussion"
+        },
+        {
+          "title": "FIRE AND FIRE SMOKE DAMPERS DESIGN AND MAINTENANCE TIMEG",
+          "slug": "01-fire-and-fire-smoke-dampers-design-and-maintenance-presented-by-paul-vanduyne-jr-pe",
+          "anchor": "fire-and-fire-smoke-dampers-design-and-maintenance-timeg"
+        }
+      ]
+    }
+  ]
+}
