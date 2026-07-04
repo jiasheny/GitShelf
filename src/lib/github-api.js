@@ -62,13 +62,13 @@ export async function githubApi(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-function githubUpload(path, body, onUploadProgress) {
+function githubUpload(path, body, onUploadProgress, method = 'PUT') {
   const pat = getPat();
   if (!pat) return Promise.reject(new Error('No GitHub PAT configured'));
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('PUT', `${GITHUB_API_BASE}${path}`);
+    xhr.open(method, `${GITHUB_API_BASE}${path}`);
     xhr.setRequestHeader('Authorization', `Bearer ${pat}`);
     xhr.setRequestHeader('Accept', 'application/vnd.github.v3+json');
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -293,21 +293,62 @@ function createUploadId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }
 
-async function cleanupUploadedParts(repo, uploaded) {
-  for (const { path, sha } of uploaded) {
-    try {
-      await githubApi(`/repos/${repo.owner}/${repo.name}/contents/${path}`, {
-        method: 'DELETE',
-        body: JSON.stringify({
-          message: 'chore(pipeline): clean up incomplete PDF upload',
-          sha,
-          branch: REPO_WRITE_BRANCH,
-        }),
-      });
-    } catch {
-      // Best effort: stale staging files do not trigger the conversion workflow.
-    }
-  }
+async function commitLargePdfUpload(repo, file, uploadId, pageCount, parts) {
+  const manifestPath = `input/${uploadId}.parts.json`;
+  const manifest = {
+    version: 1,
+    filename: file.name,
+    page_count: pageCount,
+    parts: parts.map((part) => part.path),
+  };
+  const manifestBlob = await githubApi(`/repos/${repo.owner}/${repo.name}/git/blobs`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content: encodeBase64Utf8(`${JSON.stringify(manifest, null, 2)}\n`),
+      encoding: 'base64',
+    }),
+  });
+  if (!manifestBlob?.sha) throw new Error('GitHub did not confirm the upload manifest.');
+
+  const ref = await githubApi(`/repos/${repo.owner}/${repo.name}/git/ref/heads/${REPO_WRITE_BRANCH}`);
+  const parentSha = ref?.object?.sha;
+  if (!parentSha) throw new Error(`Could not resolve branch head for ${REPO_WRITE_BRANCH}.`);
+  const parentCommit = await githubApi(`/repos/${repo.owner}/${repo.name}/git/commits/${parentSha}`);
+  const baseTree = parentCommit?.tree?.sha;
+  if (!baseTree) throw new Error(`Could not resolve base tree for ${REPO_WRITE_BRANCH}.`);
+
+  const treeEntries = [
+    ...parts.map((part) => ({
+      path: part.path,
+      mode: '100644',
+      type: 'blob',
+      sha: part.sha,
+    })),
+    {
+      path: manifestPath,
+      mode: '100644',
+      type: 'blob',
+      sha: manifestBlob.sha,
+    },
+  ];
+  const tree = await githubApi(`/repos/${repo.owner}/${repo.name}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({ base_tree: baseTree, tree: treeEntries }),
+  });
+  if (!tree?.sha) throw new Error('Failed to create the large PDF upload tree.');
+  const commit = await githubApi(`/repos/${repo.owner}/${repo.name}/git/commits`, {
+    method: 'POST',
+    body: JSON.stringify({
+      message: `feat(pipeline): assemble ${file.name}`,
+      tree: tree.sha,
+      parents: [parentSha],
+    }),
+  });
+  if (!commit?.sha) throw new Error('Failed to create the large PDF upload commit.');
+  await githubApi(`/repos/${repo.owner}/${repo.name}/git/refs/heads/${REPO_WRITE_BRANCH}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: commit.sha, force: false }),
+  });
 }
 
 async function uploadLargePdf(file, repo, onProgress) {
@@ -326,64 +367,43 @@ async function uploadLargePdf(file, repo, onProgress) {
 
   const uploadId = createUploadId();
   const uploaded = [];
-  const partPaths = [];
-  try {
-    for (let index = 0; index < chunks.length; index += 1) {
-      const partNumber = String(index + 1).padStart(5, '0');
-      const partPath = `uploads/${uploadId}/part-${partNumber}.pdf`;
-      const base64 = await readAsBase64(new Blob([chunks[index].bytes], { type: 'application/pdf' }));
-      const partStart = 20 + (index / chunks.length) * 74;
-      const partShare = 74 / chunks.length;
-      onProgress(
-        'uploading',
-        `Uploading PDF part ${index + 1} of ${chunks.length}... 0%`,
-        { percent: Math.round(partStart), uploadPercent: 0 },
-      );
-      const response = await githubUpload(
-        `/repos/${repo.owner}/${repo.name}/contents/${partPath}`,
-        {
-          message: `feat(pipeline): upload ${file.name} part ${index + 1}/${chunks.length}`,
-          content: base64,
-          branch: REPO_WRITE_BRANCH,
-        },
-        (loaded, total) => {
-          const uploadPercent = Math.round((loaded / total) * 100);
-          onProgress(
-            'uploading',
-            `Uploading PDF part ${index + 1} of ${chunks.length}... ${uploadPercent}%`,
-            {
-              percent: Math.round(partStart + (uploadPercent / 100) * partShare),
-              uploadPercent,
-            },
-          );
-        },
-      );
-      const sha = response?.content?.sha;
-      if (!sha) throw new Error(`GitHub did not confirm PDF part ${index + 1}.`);
-      uploaded.push({ path: partPath, sha });
-      partPaths.push(partPath);
-    }
-
-    const manifestPath = `input/${uploadId}.parts.json`;
-    const manifest = {
-      version: 1,
-      filename: file.name,
-      page_count: pageCount,
-      parts: partPaths,
-    };
-    onProgress('preparing', 'Starting automatic conversion...', { percent: 96 });
-    await githubUpload(
-      `/repos/${repo.owner}/${repo.name}/contents/${manifestPath}`,
-      {
-        message: `feat(pipeline): assemble ${file.name}`,
-        content: encodeBase64Utf8(`${JSON.stringify(manifest, null, 2)}\n`),
-        branch: REPO_WRITE_BRANCH,
-      },
+  for (let index = 0; index < chunks.length; index += 1) {
+    const partNumber = String(index + 1).padStart(5, '0');
+    const partPath = `uploads/${uploadId}/part-${partNumber}.pdf`;
+    const base64 = await readAsBase64(new Blob([chunks[index].bytes], { type: 'application/pdf' }));
+    const partStart = 20 + (index / chunks.length) * 74;
+    const partShare = 74 / chunks.length;
+    onProgress(
+      'uploading',
+      `Uploading PDF part ${index + 1} of ${chunks.length}... 0%`,
+      { percent: Math.round(partStart), uploadPercent: 0 },
     );
-  } catch (error) {
-    await cleanupUploadedParts(repo, uploaded);
-    throw error;
+    const response = await githubUpload(
+      `/repos/${repo.owner}/${repo.name}/git/blobs`,
+      {
+        content: base64,
+        encoding: 'base64',
+      },
+      (loaded, total) => {
+        const uploadPercent = Math.round((loaded / total) * 100);
+        onProgress(
+          'uploading',
+          `Uploading PDF part ${index + 1} of ${chunks.length}... ${uploadPercent}%`,
+          {
+            percent: Math.round(partStart + (uploadPercent / 100) * partShare),
+            uploadPercent,
+          },
+        );
+      },
+      'POST',
+    );
+    const sha = response?.sha;
+    if (!sha) throw new Error(`GitHub did not confirm PDF part ${index + 1}.`);
+    uploaded.push({ path: partPath, sha });
   }
+
+  onProgress('preparing', 'Starting automatic conversion...', { percent: 96 });
+  await commitLargePdfUpload(repo, file, uploadId, pageCount, uploaded);
 }
 
 export async function uploadContent(file, repo, onProgress) {

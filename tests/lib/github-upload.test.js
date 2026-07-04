@@ -3,9 +3,11 @@ import { uploadContent } from '../../src/lib/github-api';
 
 class FakeXMLHttpRequest {
   static latest;
+  static instances = [];
 
   constructor() {
     FakeXMLHttpRequest.latest = this;
+    FakeXMLHttpRequest.instances.push(this);
     this.upload = {};
     this.status = 201;
     this.responseText = JSON.stringify({ content: { path: 'input/book.pdf' } });
@@ -20,12 +22,16 @@ class FakeXMLHttpRequest {
 
   send(body) {
     this.body = JSON.parse(body);
+    if (this.method === 'POST' && this.url.endsWith('/git/blobs')) {
+      this.responseText = JSON.stringify({ sha: 'uploaded-blob-sha' });
+    }
     this.upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
     this.onload();
   }
 }
 
 beforeEach(() => {
+  FakeXMLHttpRequest.instances = [];
   localStorage.setItem('github_pat', 'token');
   global.XMLHttpRequest = FakeXMLHttpRequest;
   global.fetch = vi.fn(async () => ({
@@ -53,5 +59,42 @@ describe('uploadContent progress', () => {
       percent: 60,
     }));
     expect(updates.at(-1)).toEqual(expect.objectContaining({ stage: 'done', percent: 100 }));
+  });
+
+  it('uses Git blobs and one atomic commit for PDFs over 100 MB', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const source = await PDFDocument.create();
+    source.addPage([300, 400]);
+    const file = new File([await source.save()], 'large.pdf', { type: 'application/pdf' });
+    Object.defineProperty(file, 'size', { value: 101 * 1024 * 1024 });
+
+    global.fetch = vi.fn(async (url, options = {}) => {
+      let payload = {};
+      if (url.includes('/git/ref/heads/main')) payload = { object: { sha: 'parent-sha' } };
+      else if (url.includes('/git/commits/parent-sha')) payload = { tree: { sha: 'base-tree-sha' } };
+      else if (url.endsWith('/git/blobs')) payload = { sha: 'manifest-blob-sha' };
+      else if (url.endsWith('/git/trees')) payload = { sha: 'new-tree-sha' };
+      else if (url.endsWith('/git/commits')) payload = { sha: 'new-commit-sha' };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payload),
+      };
+    });
+
+    await uploadContent(file, { owner: 'owner', name: 'repo' }, () => {});
+
+    const blobRequest = FakeXMLHttpRequest.instances.find((request) => (
+      request.method === 'POST' && request.url.endsWith('/git/blobs')
+    ));
+    expect(blobRequest).toBeTruthy();
+    expect(FakeXMLHttpRequest.instances.some((request) => request.url.includes('/contents/uploads/'))).toBe(false);
+
+    const treeCall = global.fetch.mock.calls.find(([url]) => url.endsWith('/git/trees'));
+    const treeBody = JSON.parse(treeCall[1].body);
+    expect(treeBody.tree).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: expect.stringMatching(/^uploads\/.+\/part-00001\.pdf$/), sha: 'uploaded-blob-sha' }),
+      expect.objectContaining({ path: expect.stringMatching(/^input\/.+\.parts\.json$/), sha: 'manifest-blob-sha' }),
+    ]));
   });
 });
