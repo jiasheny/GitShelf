@@ -1,8 +1,11 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+import fitz
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 import sys
@@ -10,6 +13,73 @@ import sys
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import process
+
+
+class ChunkedPdfUploadTest(unittest.TestCase):
+    def _write_pdf(self, path: Path, labels: list[str]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = fitz.open()
+        try:
+            for label in labels:
+                page = document.new_page()
+                page.insert_text((72, 72), label)
+            document.save(path)
+        finally:
+            document.close()
+
+    def test_assembles_parts_in_order_and_cleans_staging_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            upload_dir = root / "uploads" / "upload123"
+            input_dir.mkdir()
+            self._write_pdf(upload_dir / "part-00001.pdf", ["one", "two"])
+            self._write_pdf(upload_dir / "part-00002.pdf", ["three"])
+            manifest = input_dir / "upload123.parts.json"
+            manifest.write_text(json.dumps({
+                "version": 1,
+                "filename": "complete.pdf",
+                "page_count": 3,
+                "parts": [
+                    "uploads/upload123/part-00001.pdf",
+                    "uploads/upload123/part-00002.pdf",
+                ],
+            }), encoding="utf-8")
+
+            assembled = process.assemble_chunked_uploads(input_dir)
+
+            output = input_dir / "complete.pdf"
+            upload = assembled[manifest.name]
+            self.assertEqual(upload.pdf_path, output)
+            with fitz.open(output) as document:
+                self.assertEqual(document.page_count, 3)
+            self.assertTrue(manifest.exists())
+            self.assertTrue(upload_dir.exists())
+
+            upload.finalize()
+
+            self.assertFalse(manifest.exists())
+            self.assertFalse(upload_dir.exists())
+
+    def test_rejects_parts_outside_uploads_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            outside = root / "outside.pdf"
+            self._write_pdf(outside, ["nope"])
+            manifest = input_dir / "unsafe.parts.json"
+            manifest.write_text(json.dumps({
+                "version": 1,
+                "filename": "complete.pdf",
+                "parts": ["outside.pdf"],
+            }), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "outside uploads"):
+                process.assemble_chunked_uploads(input_dir)
+
+            self.assertTrue(manifest.exists())
+            self.assertTrue(outside.exists())
 
 
 class EpubProcessingTest(unittest.TestCase):

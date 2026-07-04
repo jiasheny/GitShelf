@@ -19,8 +19,11 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+import fitz
 
 try:
     from .build_manifest import build_manifest
@@ -51,6 +54,19 @@ except ImportError:
 
 FAILURES_FILENAME = "failures.json"
 EBOOK_CONVERT_BINARY = "ebook-convert"
+CHUNK_MANIFEST_SUFFIX = ".parts.json"
+
+
+@dataclass
+class AssembledUpload:
+    manifest_path: Path
+    pdf_path: Path
+    part_paths: list[Path]
+
+    def finalize(self) -> None:
+        self.manifest_path.unlink(missing_ok=True)
+        for upload_root in {part.parent for part in self.part_paths}:
+            shutil.rmtree(upload_root, ignore_errors=True)
 
 
 def _utc_now_iso() -> str:
@@ -65,6 +81,82 @@ def _generate_id(path: Path) -> str:
 def detect_new_epubs(input_dir: Path) -> list[Path]:
     """Find .epub files in input_dir."""
     return sorted(input_dir.glob("*.epub"))
+
+
+def _resolve_upload_part(repo_root: Path, uploads_dir: Path, raw_path: object) -> Path:
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ValueError("Every PDF part must be a non-empty repository path.")
+    candidate = (repo_root / raw_path).resolve()
+    uploads_root = uploads_dir.resolve()
+    if candidate != uploads_root and uploads_root not in candidate.parents:
+        raise ValueError(f"PDF part is outside uploads/: {raw_path}")
+    if candidate.suffix.lower() != ".pdf":
+        raise ValueError(f"PDF part must end in .pdf: {raw_path}")
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Missing PDF part: {raw_path}")
+    return candidate
+
+
+def assemble_chunked_uploads(
+    input_dir: Path,
+    uploads_dir: Path | None = None,
+) -> dict[str, AssembledUpload]:
+    """Merge browser-split PDF page groups, retaining staging files until success."""
+    uploads_dir = uploads_dir or input_dir.parent / "uploads"
+    repo_root = input_dir.parent.resolve()
+    assembled: dict[str, AssembledUpload] = {}
+
+    for manifest_path in sorted(input_dir.glob(f"*{CHUNK_MANIFEST_SUFFIX}")):
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if data.get("version") != 1:
+            raise ValueError(f"Unsupported chunk manifest version: {manifest_path.name}")
+
+        filename = data.get("filename")
+        if (
+            not isinstance(filename, str)
+            or Path(filename).name != filename
+            or Path(filename).suffix.lower() != ".pdf"
+        ):
+            raise ValueError(f"Invalid PDF filename in {manifest_path.name}")
+
+        raw_parts = data.get("parts")
+        if not isinstance(raw_parts, list) or not raw_parts:
+            raise ValueError(f"No PDF parts listed in {manifest_path.name}")
+        part_paths = [
+            _resolve_upload_part(repo_root, uploads_dir, raw_part)
+            for raw_part in raw_parts
+        ]
+
+        output_path = input_dir / filename
+        temp_path = input_dir / f".{manifest_path.stem}.assembling.pdf"
+        merged = fitz.open()
+        try:
+            for part_path in part_paths:
+                with fitz.open(part_path) as part:
+                    if part.page_count == 0:
+                        raise ValueError(f"PDF part has no pages: {part_path.name}")
+                    merged.insert_pdf(part)
+            expected_pages = data.get("page_count")
+            if expected_pages is not None and merged.page_count != expected_pages:
+                raise ValueError(
+                    f"PDF page count mismatch: expected {expected_pages}, got {merged.page_count}"
+                )
+            merged.save(temp_path)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+        finally:
+            merged.close()
+
+        temp_path.replace(output_path)
+        assembled[manifest_path.name] = AssembledUpload(
+            manifest_path=manifest_path,
+            pdf_path=output_path,
+            part_paths=part_paths,
+        )
+        print(f"Assembled {len(part_paths)} PDF parts: {filename}")
+
+    return assembled
 
 
 def _resolve_ebook_convert() -> str:
@@ -369,6 +461,11 @@ def main() -> None:
     manifest_path = args.output_dir / "manifest.json"
     catalog_path = args.output_dir / "catalog.json"
     metadata_path = args.output_dir / "catalog-metadata.json"
+    assembled_uploads = assemble_chunked_uploads(args.input_dir)
+    assembled_by_pdf = {
+        upload.pdf_path: upload
+        for upload in assembled_uploads.values()
+    }
 
     # Collect jobs by type
     pdf_jobs: list[Path] = []
@@ -376,7 +473,13 @@ def main() -> None:
     md_jobs: list[Path] = []
     zip_jobs: list[Path] = []
 
-    if input_filename:
+    if input_filename and input_filename.lower().endswith(CHUNK_MANIFEST_SUFFIX):
+        upload = assembled_uploads.get(Path(input_filename).name)
+        if upload is None:
+            print(f"Chunk manifest not found: {input_filename}", file=sys.stderr)
+            sys.exit(1)
+        pdf_jobs = [upload.pdf_path]
+    elif input_filename:
         try:
             path = _resolve_input_file(args.input_dir, input_filename)
             ext = path.suffix.lower()
@@ -447,12 +550,20 @@ def main() -> None:
     )
 
     failures: list[tuple[Path, Exception]] = []
+    retry_filenames: dict[str, str] = {}
 
     # Process PDFs (existing pipeline)
     for pdf_path in pdf_jobs:
         try:
             convert_single_pdf(pdf_path, books_dir)
+            upload = assembled_by_pdf.get(pdf_path)
+            if upload:
+                upload.finalize()
         except Exception as exc:
+            upload = assembled_by_pdf.get(pdf_path)
+            if upload:
+                pdf_path.unlink(missing_ok=True)
+                retry_filenames[pdf_path.name] = upload.manifest_path.name
             print(f"  FAILED: {pdf_path.name}: {exc}", file=sys.stderr)
             failures.append((pdf_path, exc))
 
@@ -495,6 +606,17 @@ def main() -> None:
 
     if failures:
         _write_failures(failures, args.output_dir)
+        if retry_filenames:
+            failures_path = args.output_dir / FAILURES_FILENAME
+            failure_data = json.loads(failures_path.read_text(encoding="utf-8"))
+            for record in failure_data.get("failures", []):
+                retry_filename = retry_filenames.get(record.get("filename", ""))
+                if retry_filename:
+                    record["retry_filename"] = retry_filename
+            failures_path.write_text(
+                json.dumps(failure_data, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
         print(f"\n{len(failures)} item(s) failed:", file=sys.stderr)
         for path, exc in failures:
             print(f"  - {path.name}: {exc}", file=sys.stderr)
