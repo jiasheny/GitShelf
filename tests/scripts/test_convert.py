@@ -24,6 +24,17 @@ def _zip_with_markdown(markdown: str) -> bytes:
 
 
 class ConvertDispatchResolutionTest(unittest.TestCase):
+    def test_detect_new_pdfs_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_dir = Path(tmp_dir)
+            lower = input_dir / "lower.pdf"
+            upper = input_dir / "upper.PDF"
+            lower.write_bytes(b"%PDF-1.4\n")
+            upper.write_bytes(b"%PDF-1.4\n")
+            (input_dir / "notes.txt").write_text("ignore", encoding="utf-8")
+
+            self.assertEqual(convert.detect_new_pdfs(input_dir), [lower, upper])
+
     def test_resolve_prefers_input_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             input_dir = Path(tmp_dir) / "input"

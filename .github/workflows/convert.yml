@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - "input/**"
+      - "scripts/convert.py"
+      - "scripts/process.py"
+      - ".github/workflows/convert.yml"
   workflow_dispatch:
     inputs:
       filename:
