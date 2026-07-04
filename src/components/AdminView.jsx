@@ -8,7 +8,7 @@ import {
   loadHistory, fetchFailures, dismissFailure, retryFailure,
   getDisplayTitle, normalizeVisibility,
   normalizeTags, parseTagsInput, formatBytes, dateFormatter, dateTimeFormatter,
-  numberFormatter, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, VISIBILITY_VALUES, toIsoNow,
+  numberFormatter, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, MAX_LARGE_PDF_SIZE, VISIBILITY_VALUES, toIsoNow,
 } from '../lib/github-api';
 
 const CONTENT_TYPE_LABELS = {
@@ -139,8 +139,9 @@ function UploadSection({ repo, disabled }) {
       uploadingRef.current = false;
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setError(`File too large (${formatBytes(file.size)}). Max 100 MB.`);
+    const maxSize = ext === 'pdf' ? MAX_LARGE_PDF_SIZE : MAX_FILE_SIZE;
+    if (file.size > maxSize) {
+      setError(`File too large (${formatBytes(file.size)}). Max ${ext === 'pdf' ? '500' : '100'} MB.`);
       uploadingRef.current = false;
       return;
     }
@@ -158,7 +159,7 @@ function UploadSection({ repo, disabled }) {
     }
   };
 
-  const toneMap = { reading: 'info', preparing: 'info', uploading: 'info', done: 'success', error: 'error' };
+  const toneMap = { reading: 'info', splitting: 'info', preparing: 'info', uploading: 'info', done: 'success', error: 'error' };
   const uploading = progress && !['done', 'error'].includes(progress.stage);
   const actionsUrl = repo.owner && repo.name ? `https://github.com/${repo.owner}/${repo.name}/actions` : null;
 
@@ -197,7 +198,7 @@ function UploadSection({ repo, disabled }) {
             <path d="M32 32l-8-8-8 8M24 24v18M40.78 37.09A10 10 0 0 0 36 18h-2.52A16 16 0 1 0 8 32.29" />
           </svg>
           <div class="upload-dropzone-text">Drop PDF, EPUB, Markdown, or ZIP here or click to browse</div>
-          <div class="upload-dropzone-hint">Maximum 100 MB</div>
+          <div class="upload-dropzone-hint">PDF up to 500 MB · other files up to 100 MB</div>
         </div>
       )}
       {progress && progress.stage === 'done' && actionsUrl ? (
@@ -269,17 +270,17 @@ function FailuresSection({ repo }) {
 
   if (failures.length === 0) return null;
 
-  const handleRetry = async (filename) => {
+  const handleRetry = async (failure) => {
     try {
-      await retryFailure(repo, filename);
+      await retryFailure(repo, failure.filename, failure.retry_filename);
       showToast('Re-conversion triggered', 'info');
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  const handleDismiss = async (filename) => {
+  const handleDismiss = async (failure) => {
     try {
-      await dismissFailure(repo, filename);
-      setFailures((prev) => prev.filter((f) => f.filename !== filename));
+      await dismissFailure(repo, failure.filename, failure.retry_filename);
+      setFailures((prev) => prev.filter((f) => f.filename !== failure.filename));
       showToast('Failure dismissed', 'success');
     } catch (err) { showToast(err.message, 'error'); }
   };
@@ -296,8 +297,8 @@ function FailuresSection({ repo }) {
               {f.failed_at && <span class="admin-book-subtle">{dateTimeFormatter.format(new Date(f.failed_at))}</span>}
             </div>
             <div class="admin-actions">
-              <button class="btn btn-secondary btn-sm" onClick={() => handleRetry(f.filename)}>Retry</button>
-              <button class="btn btn-ghost-danger btn-sm" onClick={() => handleDismiss(f.filename)}>Dismiss</button>
+              <button class="btn btn-secondary btn-sm" onClick={() => handleRetry(f)}>Retry</button>
+              <button class="btn btn-ghost-danger btn-sm" onClick={() => handleDismiss(f)}>Dismiss</button>
             </div>
           </div>
         ))}

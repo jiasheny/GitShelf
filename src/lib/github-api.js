@@ -10,6 +10,7 @@ const CATALOG_DEFAULT_PATH = 'docs/catalog.json';
 const CATALOG_METADATA_PATH = 'docs/catalog-metadata.json';
 const VISIBILITY_VALUES = ['published', 'hidden', 'archived'];
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_LARGE_PDF_SIZE = 500 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['pdf', 'epub', 'md', 'zip'];
 
 const CONTENT_TYPE_DIRS = {
@@ -273,24 +274,134 @@ export async function persistCatalog(repo, nextItems, message, extraOps) {
 
 export function deepCloneItems(items) { return items.map(b => ({ ...b, tags: (b.tags || []).slice() })); }
 
-export async function uploadContent(file, repo, onProgress) {
-  if (!repo.owner || !repo.name) throw new Error('Repository not configured.');
-  if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (max 100 MB).`);
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (!ACCEPTED_EXTENSIONS.includes(ext)) throw new Error(`Unsupported file type. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
-  onProgress('reading', `Reading ${file.name}...`, { percent: 0 });
-  const base64 = await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(typeof r.result === 'string' ? r.result.split(',')[1] : '');
-    r.onerror = () => reject(new Error('Failed to read file.'));
-    r.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress('reading', `Reading ${file.name}...`, {
-          percent: Math.round((event.loaded / event.total) * 20),
-        });
+function readAsBase64(value, onReadProgress) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result.split(',')[1] : '');
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.onprogress = (event) => {
+      if (event.lengthComputable && typeof onReadProgress === 'function') {
+        onReadProgress(event.loaded, event.total);
       }
     };
-    r.readAsDataURL(file);
+    reader.readAsDataURL(value);
+  });
+}
+
+function createUploadId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().replaceAll('-', '');
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+}
+
+async function cleanupUploadedParts(repo, uploaded) {
+  for (const { path, sha } of uploaded) {
+    try {
+      await githubApi(`/repos/${repo.owner}/${repo.name}/contents/${path}`, {
+        method: 'DELETE',
+        body: JSON.stringify({
+          message: 'chore(pipeline): clean up incomplete PDF upload',
+          sha,
+          branch: REPO_WRITE_BRANCH,
+        }),
+      });
+    } catch {
+      // Best effort: stale staging files do not trigger the conversion workflow.
+    }
+  }
+}
+
+async function uploadLargePdf(file, repo, onProgress) {
+  const { splitPdfIntoChunks } = await import('./pdf-chunks');
+  onProgress('splitting', 'Splitting PDF into page groups...', { percent: 2 });
+  const { chunks, pageCount } = await splitPdfIntoChunks(file, {
+    onProgress: (completedPages, totalPages) => {
+      const percent = 2 + Math.round((completedPages / totalPages) * 18);
+      onProgress(
+        'splitting',
+        `Splitting PDF pages... ${completedPages}/${totalPages}`,
+        { percent },
+      );
+    },
+  });
+
+  const uploadId = createUploadId();
+  const uploaded = [];
+  const partPaths = [];
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const partNumber = String(index + 1).padStart(5, '0');
+      const partPath = `uploads/${uploadId}/part-${partNumber}.pdf`;
+      const base64 = await readAsBase64(new Blob([chunks[index].bytes], { type: 'application/pdf' }));
+      const partStart = 20 + (index / chunks.length) * 74;
+      const partShare = 74 / chunks.length;
+      onProgress(
+        'uploading',
+        `Uploading PDF part ${index + 1} of ${chunks.length}... 0%`,
+        { percent: Math.round(partStart), uploadPercent: 0 },
+      );
+      const response = await githubUpload(
+        `/repos/${repo.owner}/${repo.name}/contents/${partPath}`,
+        {
+          message: `feat(pipeline): upload ${file.name} part ${index + 1}/${chunks.length}`,
+          content: base64,
+          branch: REPO_WRITE_BRANCH,
+        },
+        (loaded, total) => {
+          const uploadPercent = Math.round((loaded / total) * 100);
+          onProgress(
+            'uploading',
+            `Uploading PDF part ${index + 1} of ${chunks.length}... ${uploadPercent}%`,
+            {
+              percent: Math.round(partStart + (uploadPercent / 100) * partShare),
+              uploadPercent,
+            },
+          );
+        },
+      );
+      const sha = response?.content?.sha;
+      if (!sha) throw new Error(`GitHub did not confirm PDF part ${index + 1}.`);
+      uploaded.push({ path: partPath, sha });
+      partPaths.push(partPath);
+    }
+
+    const manifestPath = `input/${uploadId}.parts.json`;
+    const manifest = {
+      version: 1,
+      filename: file.name,
+      page_count: pageCount,
+      parts: partPaths,
+    };
+    onProgress('preparing', 'Starting automatic conversion...', { percent: 96 });
+    await githubUpload(
+      `/repos/${repo.owner}/${repo.name}/contents/${manifestPath}`,
+      {
+        message: `feat(pipeline): assemble ${file.name}`,
+        content: encodeBase64Utf8(`${JSON.stringify(manifest, null, 2)}\n`),
+        branch: REPO_WRITE_BRANCH,
+      },
+    );
+  } catch (error) {
+    await cleanupUploadedParts(repo, uploaded);
+    throw error;
+  }
+}
+
+export async function uploadContent(file, repo, onProgress) {
+  if (!repo.owner || !repo.name) throw new Error('Repository not configured.');
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) throw new Error(`Unsupported file type. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
+  if (ext === 'pdf' && file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_LARGE_PDF_SIZE) throw new Error('PDF too large (max 500 MB).');
+    await uploadLargePdf(file, repo, onProgress);
+    onProgress('done', 'Upload complete.', { percent: 100 });
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (max 100 MB).`);
+  onProgress('reading', `Reading ${file.name}...`, { percent: 0 });
+  const base64 = await readAsBase64(file, (loaded, total) => {
+        onProgress('reading', `Reading ${file.name}...`, {
+      percent: Math.round((loaded / total) * 20),
+        });
   });
   onProgress('preparing', 'Preparing GitHub upload...', { percent: 20 });
   const filePath = `input/${encodeURIComponent(file.name)}`;
@@ -392,21 +503,28 @@ export async function fetchFailures(repo) {
   }
 }
 
-export async function dismissFailure(repo, filename) {
+export async function dismissFailure(repo, filename, retryFilename = filename) {
   const all = await fetchFailures(repo);
   const filtered = all.filter(f => f.filename !== filename);
   const ops = [{ path: FAILURES_PATH, content: JSON.stringify({ failures: filtered }, null, 2) + '\n' }];
-  const filePath = `input/${filename}`;
+  const filePath = `input/${retryFilename}`;
   try {
-    await githubApi(`/repos/${repo.owner}/${repo.name}/contents/${filePath}`);
+    const source = await readRepositoryJson(repo, filePath);
     ops.push({ path: filePath, delete: true });
+    if (retryFilename.endsWith('.parts.json')) {
+      for (const partPath of source.data?.parts || []) {
+        if (typeof partPath === 'string' && partPath.startsWith('uploads/')) {
+          ops.push({ path: partPath, delete: true });
+        }
+      }
+    }
   } catch { /* file may not exist */ }
   await commitRepositoryOperations(repo, `chore(admin): dismiss failure for ${filename}`, ops);
 }
 
-export async function retryFailure(repo, filename) {
+export async function retryFailure(repo, filename, retryFilename = filename) {
   await githubApi(`/repos/${repo.owner}/${repo.name}/actions/workflows/convert.yml/dispatches`, {
-    method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { filename } }),
+    method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { filename: retryFilename } }),
   });
 }
 
@@ -422,4 +540,4 @@ export const dateFormatter = new Intl.DateTimeFormat(undefined, { year: 'numeric
 export const dateTimeFormatter = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 export const numberFormatter = new Intl.NumberFormat(undefined);
 
-export { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, VISIBILITY_VALUES, toIsoNow };
+export { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, MAX_LARGE_PDF_SIZE, VISIBILITY_VALUES, toIsoNow };
