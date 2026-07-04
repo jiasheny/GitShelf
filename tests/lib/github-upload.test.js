@@ -62,10 +62,7 @@ describe('uploadContent progress', () => {
   });
 
   it('uses Git blobs and one atomic commit for PDFs over 100 MB', async () => {
-    const { PDFDocument } = await import('pdf-lib');
-    const source = await PDFDocument.create();
-    source.addPage([300, 400]);
-    const file = new File([await source.save()], 'large.pdf', { type: 'application/pdf' });
+    const file = new File(['small test payload'], 'large.pdf', { type: 'application/pdf' });
     Object.defineProperty(file, 'size', { value: 101 * 1024 * 1024 });
 
     global.fetch = vi.fn(async (url, options = {}) => {
@@ -93,7 +90,7 @@ describe('uploadContent progress', () => {
     const treeCall = global.fetch.mock.calls.find(([url]) => url.endsWith('/git/trees'));
     const treeBody = JSON.parse(treeCall[1].body);
     expect(treeBody.tree).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: expect.stringMatching(/^uploads\/.+\/part-00001\.pdf$/), sha: 'uploaded-blob-sha' }),
+      expect.objectContaining({ path: expect.stringMatching(/^uploads\/.+\/part-00001\.part$/), sha: 'uploaded-blob-sha' }),
       expect.objectContaining({ path: expect.stringMatching(/^input\/.+\.parts\.json$/), sha: 'manifest-blob-sha' }),
     ]));
   });

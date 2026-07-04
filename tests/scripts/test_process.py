@@ -81,6 +81,37 @@ class ChunkedPdfUploadTest(unittest.TestCase):
             self.assertTrue(manifest.exists())
             self.assertTrue(outside.exists())
 
+    def test_reassembles_raw_binary_parts_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            upload_dir = root / "uploads" / "raw123"
+            input_dir.mkdir()
+            original = root / "original.pdf"
+            self._write_pdf(original, ["one", "two", "three"])
+            original_bytes = original.read_bytes()
+            midpoint = len(original_bytes) // 2
+            upload_dir.mkdir(parents=True)
+            (upload_dir / "part-00001.part").write_bytes(original_bytes[:midpoint])
+            (upload_dir / "part-00002.part").write_bytes(original_bytes[midpoint:])
+            manifest = input_dir / "raw123.parts.json"
+            manifest.write_text(json.dumps({
+                "version": 1,
+                "assembly": "bytes",
+                "filename": "restored.pdf",
+                "file_size": len(original_bytes),
+                "parts": [
+                    "uploads/raw123/part-00001.part",
+                    "uploads/raw123/part-00002.part",
+                ],
+            }), encoding="utf-8")
+
+            upload = process.assemble_chunked_uploads(input_dir)[manifest.name]
+
+            self.assertEqual(upload.pdf_path.read_bytes(), original_bytes)
+            with fitz.open(upload.pdf_path) as document:
+                self.assertEqual(document.page_count, 3)
+
 
 class EpubProcessingTest(unittest.TestCase):
     def test_process_epub_converts_to_pdf_and_reuses_pdf_pipeline(self) -> None:

@@ -83,15 +83,20 @@ def detect_new_epubs(input_dir: Path) -> list[Path]:
     return sorted(input_dir.glob("*.epub"))
 
 
-def _resolve_upload_part(repo_root: Path, uploads_dir: Path, raw_path: object) -> Path:
+def _resolve_upload_part(
+    repo_root: Path,
+    uploads_dir: Path,
+    raw_path: object,
+    allowed_suffix: str,
+) -> Path:
     if not isinstance(raw_path, str) or not raw_path:
         raise ValueError("Every PDF part must be a non-empty repository path.")
     candidate = (repo_root / raw_path).resolve()
     uploads_root = uploads_dir.resolve()
     if candidate != uploads_root and uploads_root not in candidate.parents:
         raise ValueError(f"PDF part is outside uploads/: {raw_path}")
-    if candidate.suffix.lower() != ".pdf":
-        raise ValueError(f"PDF part must end in .pdf: {raw_path}")
+    if candidate.suffix.lower() != allowed_suffix:
+        raise ValueError(f"Upload part must end in {allowed_suffix}: {raw_path}")
     if not candidate.is_file():
         raise FileNotFoundError(f"Missing PDF part: {raw_path}")
     return candidate
@@ -122,31 +127,54 @@ def assemble_chunked_uploads(
         raw_parts = data.get("parts")
         if not isinstance(raw_parts, list) or not raw_parts:
             raise ValueError(f"No PDF parts listed in {manifest_path.name}")
+        assembly = data.get("assembly", "pdf-pages")
+        if assembly not in {"pdf-pages", "bytes"}:
+            raise ValueError(f"Unsupported PDF assembly mode: {assembly}")
+        allowed_suffix = ".part" if assembly == "bytes" else ".pdf"
         part_paths = [
-            _resolve_upload_part(repo_root, uploads_dir, raw_part)
+            _resolve_upload_part(repo_root, uploads_dir, raw_part, allowed_suffix)
             for raw_part in raw_parts
         ]
 
         output_path = input_dir / filename
         temp_path = input_dir / f".{manifest_path.stem}.assembling.pdf"
-        merged = fitz.open()
         try:
-            for part_path in part_paths:
-                with fitz.open(part_path) as part:
-                    if part.page_count == 0:
-                        raise ValueError(f"PDF part has no pages: {part_path.name}")
-                    merged.insert_pdf(part)
-            expected_pages = data.get("page_count")
-            if expected_pages is not None and merged.page_count != expected_pages:
-                raise ValueError(
-                    f"PDF page count mismatch: expected {expected_pages}, got {merged.page_count}"
-                )
-            merged.save(temp_path)
+            if assembly == "bytes":
+                with temp_path.open("wb") as merged_file:
+                    for part_path in part_paths:
+                        with part_path.open("rb") as part_file:
+                            shutil.copyfileobj(part_file, merged_file)
+                expected_size = data.get("file_size")
+                if not isinstance(expected_size, int) or expected_size <= 0:
+                    raise ValueError(f"Invalid file size in {manifest_path.name}")
+                if temp_path.stat().st_size != expected_size:
+                    raise ValueError(
+                        f"PDF size mismatch: expected {expected_size}, "
+                        f"got {temp_path.stat().st_size}"
+                    )
+                with fitz.open(temp_path) as document:
+                    if document.page_count == 0:
+                        raise ValueError("Reassembled PDF does not contain any pages.")
+            else:
+                merged = fitz.open()
+                try:
+                    for part_path in part_paths:
+                        with fitz.open(part_path) as part:
+                            if part.page_count == 0:
+                                raise ValueError(f"PDF part has no pages: {part_path.name}")
+                            merged.insert_pdf(part)
+                    expected_pages = data.get("page_count")
+                    if expected_pages is not None and merged.page_count != expected_pages:
+                        raise ValueError(
+                            f"PDF page count mismatch: expected {expected_pages}, "
+                            f"got {merged.page_count}"
+                        )
+                    merged.save(temp_path)
+                finally:
+                    merged.close()
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise
-        finally:
-            merged.close()
 
         temp_path.replace(output_path)
         assembled[manifest_path.name] = AssembledUpload(
