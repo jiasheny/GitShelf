@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-03T06:15:01Z",
+  "generated_at": "2026-07-04T15:25:41Z",
   "items": [
     {
       "id": "fire-firesmoke-dampers-andmaintenance-imeg",
@@ -63,6 +63,27 @@
       "updated_at": "2026-03-27T07:42:02Z",
       "source": "progit.pdf",
       "page_count": 574
+    },
+    {
+      "id": "中央空调节能及自控系统设计",
+      "type": "book",
+      "title": "中央空调节能及自控系统设计",
+      "generated_title": "中央空调节能及自控系统设计",
+      "display_title": null,
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "manual_order": null,
+      "visibility": "published",
+      "metadata_updated_at": null,
+      "chapters_count": 2,
+      "word_count": 32929,
+      "source_format": "markdown-derived",
+      "created_at": "2026-07-04T15:25:41Z",
+      "updated_at": "2026-07-04T15:25:41Z",
+      "source": "中央空调节能及自控系统设计.PDF",
+      "page_count": 527
     }
   ]
 }
