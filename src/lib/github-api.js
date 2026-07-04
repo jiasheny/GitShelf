@@ -11,6 +11,7 @@ const CATALOG_METADATA_PATH = 'docs/catalog-metadata.json';
 const VISIBILITY_VALUES = ['published', 'hidden', 'archived'];
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MAX_LARGE_PDF_SIZE = 500 * 1024 * 1024;
+const LARGE_PDF_CHUNK_SIZE = 15 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['pdf', 'epub', 'md', 'zip'];
 
 const CONTENT_TYPE_DIRS = {
@@ -293,12 +294,13 @@ function createUploadId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }
 
-async function commitLargePdfUpload(repo, file, uploadId, pageCount, parts) {
+async function commitLargePdfUpload(repo, file, uploadId, parts) {
   const manifestPath = `input/${uploadId}.parts.json`;
   const manifest = {
     version: 1,
+    assembly: 'bytes',
     filename: file.name,
-    page_count: pageCount,
+    file_size: file.size,
     parts: parts.map((part) => part.path),
   };
   const manifestBlob = await githubApi(`/repos/${repo.owner}/${repo.name}/git/blobs`, {
@@ -352,30 +354,22 @@ async function commitLargePdfUpload(repo, file, uploadId, pageCount, parts) {
 }
 
 async function uploadLargePdf(file, repo, onProgress) {
-  const { splitPdfIntoChunks } = await import('./pdf-chunks');
-  onProgress('splitting', 'Splitting PDF into page groups...', { percent: 2 });
-  const { chunks, pageCount } = await splitPdfIntoChunks(file, {
-    onProgress: (completedPages, totalPages) => {
-      const percent = 2 + Math.round((completedPages / totalPages) * 18);
-      onProgress(
-        'splitting',
-        `Splitting PDF pages... ${completedPages}/${totalPages}`,
-        { percent },
-      );
-    },
-  });
-
   const uploadId = createUploadId();
   const uploaded = [];
-  for (let index = 0; index < chunks.length; index += 1) {
+  const chunkCount = Math.ceil(file.size / LARGE_PDF_CHUNK_SIZE);
+  onProgress('splitting', `Preparing ${chunkCount} safe upload parts...`, { percent: 2 });
+
+  for (let index = 0; index < chunkCount; index += 1) {
     const partNumber = String(index + 1).padStart(5, '0');
-    const partPath = `uploads/${uploadId}/part-${partNumber}.pdf`;
-    const base64 = await readAsBase64(new Blob([chunks[index].bytes], { type: 'application/pdf' }));
-    const partStart = 20 + (index / chunks.length) * 74;
-    const partShare = 74 / chunks.length;
+    const partPath = `uploads/${uploadId}/part-${partNumber}.part`;
+    const start = index * LARGE_PDF_CHUNK_SIZE;
+    const chunk = file.slice(start, Math.min(file.size, start + LARGE_PDF_CHUNK_SIZE));
+    const base64 = await readAsBase64(chunk);
+    const partStart = 3 + (index / chunkCount) * 91;
+    const partShare = 91 / chunkCount;
     onProgress(
       'uploading',
-      `Uploading PDF part ${index + 1} of ${chunks.length}... 0%`,
+      `Uploading PDF part ${index + 1} of ${chunkCount}... 0%`,
       { percent: Math.round(partStart), uploadPercent: 0 },
     );
     const response = await githubUpload(
@@ -388,7 +382,7 @@ async function uploadLargePdf(file, repo, onProgress) {
         const uploadPercent = Math.round((loaded / total) * 100);
         onProgress(
           'uploading',
-          `Uploading PDF part ${index + 1} of ${chunks.length}... ${uploadPercent}%`,
+          `Uploading PDF part ${index + 1} of ${chunkCount}... ${uploadPercent}%`,
           {
             percent: Math.round(partStart + (uploadPercent / 100) * partShare),
             uploadPercent,
@@ -403,7 +397,7 @@ async function uploadLargePdf(file, repo, onProgress) {
   }
 
   onProgress('preparing', 'Starting automatic conversion...', { percent: 96 });
-  await commitLargePdfUpload(repo, file, uploadId, pageCount, uploaded);
+  await commitLargePdfUpload(repo, file, uploadId, uploaded);
 }
 
 export async function uploadContent(file, repo, onProgress) {
