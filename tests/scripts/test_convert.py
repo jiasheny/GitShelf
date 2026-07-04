@@ -159,6 +159,20 @@ body 3
 
 
 class PdfChunkingTest(unittest.TestCase):
+    def test_write_cache_skips_zip_above_github_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            oversized = b"oversized"
+
+            with (
+                patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "MAX_GITHUB_CACHE_FILE_SIZE", len(oversized) - 1),
+            ):
+                convert._write_cache("large", oversized, 300, [])
+
+            self.assertFalse((cache_dir / "large.zip").exists())
+            self.assertTrue((cache_dir / "large.meta.json").exists())
+
     def test_split_pdf_uses_mineru_page_limit_by_default(self) -> None:
         if convert.fitz is None:
             self.skipTest("PyMuPDF is not installed")

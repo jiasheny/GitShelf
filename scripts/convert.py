@@ -62,6 +62,7 @@ PAGE_THRESHOLD = MAX_PAGES_PER_CHUNK
 BOOK_METADATA_FILENAME = "meta.json"
 CACHE_DIR = Path("cache/markdown")
 CHUNK_CACHE_DIR = CACHE_DIR / "chunks"
+MAX_GITHUB_CACHE_FILE_SIZE = 95 * 1024 * 1024
 FAILURES_FILENAME = "failures.json"
 CHAPTER_IMAGES_PREFIX = "../images/"
 CONTENT_DIR_NAMES = {
@@ -566,7 +567,15 @@ def _write_cache(
 ) -> None:
     """Write raw MinerU ZIP and metadata to cache."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    (CACHE_DIR / f"{md5}.zip").write_bytes(zip_data)
+    zip_path = CACHE_DIR / f"{md5}.zip"
+    if len(zip_data) <= MAX_GITHUB_CACHE_FILE_SIZE:
+        zip_path.write_bytes(zip_data)
+    else:
+        zip_path.unlink(missing_ok=True)
+        print(
+            f"  Skipping merged cache ZIP ({len(zip_data) / 1024 / 1024:.2f} MB); "
+            "chunk caches remain available for retry."
+        )
     meta = {
         "page_count": page_count,
         "toc": [{"level": e.level, "title": e.title} for e in toc],

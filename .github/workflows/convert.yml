@@ -2,6 +2,7 @@ name: Process Content
 
 on:
   push:
+    branches: [main]
     paths:
       - "input/**"
       - "scripts/convert.py"
