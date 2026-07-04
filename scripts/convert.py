@@ -86,8 +86,14 @@ def _pdf_md5(pdf_path: Path) -> str:
 
 
 def detect_new_pdfs(input_dir: Path) -> list[Path]:
-    """Find .pdf files in input_dir."""
-    return sorted(input_dir.glob("*.pdf"))
+    """Find PDF files in input_dir, regardless of extension casing."""
+    if not input_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in input_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == ".pdf"
+    )
 
 
 def get_page_count(pdf_path: Path) -> int:

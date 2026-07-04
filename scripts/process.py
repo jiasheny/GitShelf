@@ -562,7 +562,14 @@ def main() -> None:
                 print(f"File not found: {input_filename}", file=sys.stderr)
                 sys.exit(1)
     else:
-        pdf_jobs = detect_new_pdfs(args.input_dir)
+        assembled_pdf_jobs = [
+            upload.pdf_path
+            for upload in assembled_uploads.values()
+        ]
+        pdf_jobs = list(dict.fromkeys([
+            *assembled_pdf_jobs,
+            *detect_new_pdfs(args.input_dir),
+        ]))
         epub_jobs = detect_new_epubs(args.input_dir)
         md_jobs = sorted(args.input_dir.glob("*.md"))
         zip_jobs = sorted(args.input_dir.glob("*.zip"))
