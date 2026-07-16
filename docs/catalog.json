@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-04T15:25:41Z",
+  "generated_at": "2026-07-16T12:47:07Z",
   "items": [
     {
       "id": "fire-firesmoke-dampers-andmaintenance-imeg",
@@ -20,7 +20,10 @@
       "created_at": "2026-07-03T06:15:01Z",
       "updated_at": "2026-07-03T06:15:01Z",
       "source": "Fire-FireSmoke-Dampers-andMaintenance-IMEG.pdf",
-      "page_count": 64
+      "page_count": 64,
+      "conversion_method": null,
+      "model_version": null,
+      "ocr_used": null
     },
     {
       "id": "gb-50736-2012-民用建筑供暖通风与空气调节设计规范",
@@ -41,7 +44,10 @@
       "created_at": "2026-07-03T05:36:27Z",
       "updated_at": "2026-07-03T05:36:27Z",
       "source": "GB 50736-2012 民用建筑供暖通风与空气调节设计规范.pdf",
-      "page_count": 175
+      "page_count": 175,
+      "conversion_method": null,
+      "model_version": null,
+      "ocr_used": null
     },
     {
       "id": "progit",
@@ -62,7 +68,10 @@
       "created_at": "2026-03-27T07:42:02Z",
       "updated_at": "2026-03-27T07:42:02Z",
       "source": "progit.pdf",
-      "page_count": 574
+      "page_count": 574,
+      "conversion_method": null,
+      "model_version": null,
+      "ocr_used": null
     },
     {
       "id": "中央空调节能及自控系统设计",
@@ -83,7 +92,34 @@
       "created_at": "2026-07-04T15:25:41Z",
       "updated_at": "2026-07-04T15:25:41Z",
       "source": "中央空调节能及自控系统设计.PDF",
-      "page_count": 527
+      "page_count": 527,
+      "conversion_method": null,
+      "model_version": null,
+      "ocr_used": null
+    },
+    {
+      "id": "防火阀和排烟阀中美标准对比分析",
+      "type": "book",
+      "title": "防火阀和排烟阀中美标准对比分析",
+      "generated_title": "防火阀和排烟阀中美标准对比分析",
+      "display_title": null,
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "manual_order": null,
+      "visibility": "published",
+      "metadata_updated_at": null,
+      "chapters_count": 2,
+      "word_count": 674,
+      "source_format": "markdown-derived",
+      "created_at": "2026-07-16T12:47:07Z",
+      "updated_at": "2026-07-16T12:47:07Z",
+      "source": "防火阀和排烟阀中美标准对比分析.pdf",
+      "page_count": 6,
+      "conversion_method": "pdf-native-text",
+      "model_version": "pipeline",
+      "ocr_used": false
     }
   ]
 }
