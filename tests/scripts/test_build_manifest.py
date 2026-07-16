@@ -251,6 +251,36 @@ class BuildManifestTest(unittest.TestCase):
                     sites_dir=sites_dir,
                 )
 
+    def test_catalog_records_conversion_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            books_dir = root / "docs" / "books"
+            manifest_path = root / "docs" / "manifest.json"
+            metadata_path = root / "docs" / "catalog-metadata.json"
+            catalog_path = root / "docs" / "catalog.json"
+
+            _create_book(books_dir, book_id="word-book", title="Word Book", source="word.docx")
+            meta_path = books_dir / "word-book" / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta.update({
+                "conversion_method": "docx-native",
+                "model_version": "pipeline",
+                "ocr_used": False,
+            })
+            _write_json(meta_path, meta)
+
+            build_manifest(
+                books_dir=books_dir,
+                output_path=manifest_path,
+                catalog_metadata_path=metadata_path,
+                catalog_output_path=catalog_path,
+            )
+
+            item = json.loads(catalog_path.read_text(encoding="utf-8"))["items"][0]
+            self.assertEqual(item["conversion_method"], "docx-native")
+            self.assertEqual(item["model_version"], "pipeline")
+            self.assertFalse(item["ocr_used"])
+
     def test_typed_metadata_can_distinguish_same_id_across_content_types(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

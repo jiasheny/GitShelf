@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unicodedata
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -59,6 +60,13 @@ except ImportError:
 
 MAX_PAGES_PER_CHUNK = 200
 PAGE_THRESHOLD = MAX_PAGES_PER_CHUNK
+TEXT_PDF_MODEL = "pipeline"
+OCR_PDF_MODEL = "vlm"
+DOCX_MODEL = "pipeline"
+PDF_SAMPLE_PAGES = 20
+MIN_NATIVE_TEXT_CHARS = 80
+NATIVE_TEXT_RATIO = 0.85
+SCANNED_TEXT_RATIO = 0.2
 BOOK_METADATA_FILENAME = "meta.json"
 CACHE_DIR = Path("cache/markdown")
 CHUNK_CACHE_DIR = CACHE_DIR / "chunks"
@@ -77,13 +85,28 @@ CONTENT_ID_SUFFIXES = {
 }
 
 
-def _pdf_md5(pdf_path: Path) -> str:
-    """Compute MD5 hex digest of a PDF file."""
+@dataclass(frozen=True)
+class PdfConversionPlan:
+    kind: str
+    model_version: str
+    conversion_method: str
+    ocr_used: bool
+    sampled_pages: int
+    native_text_pages: int
+
+
+def _file_md5(file_path: Path) -> str:
+    """Compute the MD5 hex digest of an input document."""
     h = hashlib.md5()
-    with open(pdf_path, "rb") as f:
+    with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _pdf_md5(pdf_path: Path) -> str:
+    """Backward-compatible alias for PDF cache keys."""
+    return _file_md5(pdf_path)
 
 
 def detect_new_pdfs(input_dir: Path) -> list[Path]:
@@ -95,6 +118,81 @@ def detect_new_pdfs(input_dir: Path) -> list[Path]:
         for path in input_dir.iterdir()
         if path.is_file() and path.suffix.lower() == ".pdf"
     )
+
+
+def _sample_page_indices(page_count: int, limit: int = PDF_SAMPLE_PAGES) -> list[int]:
+    if page_count <= 0:
+        return []
+    if limit <= 1:
+        return [0]
+    if page_count <= limit:
+        return list(range(page_count))
+    return sorted({round(index * (page_count - 1) / (limit - 1)) for index in range(limit)})
+
+
+def _has_reliable_native_text(text: str) -> bool:
+    compact = "".join(str(text or "").split())
+    if len(compact) < MIN_NATIVE_TEXT_CHARS:
+        return False
+    invalid = sum(
+        char == "\ufffd" or 0xE000 <= ord(char) <= 0xF8FF
+        for char in compact
+    )
+    readable = sum(char.isalnum() or "\u3400" <= char <= "\u9fff" for char in compact)
+    return invalid / len(compact) < 0.03 and readable / len(compact) >= 0.3
+
+
+def detect_pdf_conversion_plan(pdf_path: Path) -> PdfConversionPlan:
+    """Classify a PDF from representative pages before choosing a MinerU model."""
+    if fitz is None:
+        raise RuntimeError(
+            "PyMuPDF (fitz) is required to inspect PDF text layers. Install dependencies from requirements.txt."
+        )
+    with fitz.open(pdf_path) as document:
+        indices = _sample_page_indices(document.page_count)
+        native_pages = sum(
+            _has_reliable_native_text(document[index].get_text("text"))
+            for index in indices
+        )
+
+    sampled = len(indices)
+    ratio = native_pages / sampled if sampled else 0
+    if ratio >= NATIVE_TEXT_RATIO:
+        return PdfConversionPlan(
+            kind="text",
+            model_version=TEXT_PDF_MODEL,
+            conversion_method="pdf-native-text",
+            ocr_used=False,
+            sampled_pages=sampled,
+            native_text_pages=native_pages,
+        )
+    if ratio <= SCANNED_TEXT_RATIO:
+        kind = "scanned"
+        method = "pdf-ocr"
+    else:
+        kind = "mixed"
+        method = "pdf-mixed-ocr"
+    return PdfConversionPlan(
+        kind=kind,
+        model_version=OCR_PDF_MODEL,
+        conversion_method=method,
+        ocr_used=True,
+        sampled_pages=sampled,
+        native_text_pages=native_pages,
+    )
+
+
+def _markdown_needs_ocr_fallback(markdown: str, page_count: int) -> bool:
+    """Detect obviously incomplete or garbled output from the fast text route."""
+    compact = "".join(str(markdown or "").split())
+    minimum = max(200, min(page_count, 100) * 40)
+    if len(compact) < minimum:
+        return True
+    invalid = sum(
+        char == "\ufffd" or 0xE000 <= ord(char) <= 0xF8FF
+        for char in compact
+    )
+    return invalid / len(compact) >= 0.03
 
 
 def get_page_count(pdf_path: Path) -> int:
@@ -200,6 +298,9 @@ def _write_book_metadata(
     pdf_md5: str,
     page_count: int,
     updated_at: str,
+    conversion_method: str | None = None,
+    model_version: str | None = None,
+    ocr_used: bool | None = None,
 ) -> None:
     created_at = updated_at
     existing_meta_path = book_dir / BOOK_METADATA_FILENAME
@@ -220,6 +321,12 @@ def _write_book_metadata(
         "created_at": created_at,
         "updated_at": updated_at,
     }
+    if conversion_method:
+        data["conversion_method"] = conversion_method
+    if model_version:
+        data["model_version"] = model_version
+    if ocr_used is not None:
+        data["ocr_used"] = ocr_used
     target = book_dir / BOOK_METADATA_FILENAME
     target.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",
@@ -520,6 +627,7 @@ def reconvert_from_cache(
         )
 
     markdown, images, page_count, toc = cached
+    cache_meta = _read_cache_metadata(md5)
     book_id = generate_book_id(Path(source_pdf))
     title = Path(source_pdf).stem
 
@@ -555,6 +663,9 @@ def reconvert_from_cache(
         pdf_md5=md5,
         page_count=page_count,
         updated_at=_utc_now_iso(),
+        conversion_method=cache_meta.get("conversion_method"),
+        model_version=cache_meta.get("model_version"),
+        ocr_used=cache_meta.get("ocr_used"),
     )
     print(f"  Reconversion complete.")
 
@@ -564,6 +675,10 @@ def _write_cache(
     zip_data: bytes,
     page_count: int,
     toc: list[TocEntry],
+    *,
+    conversion_method: str | None = None,
+    model_version: str | None = None,
+    ocr_used: bool | None = None,
 ) -> None:
     """Write raw MinerU ZIP and metadata to cache."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -580,6 +695,12 @@ def _write_cache(
         "page_count": page_count,
         "toc": [{"level": e.level, "title": e.title} for e in toc],
     }
+    if conversion_method:
+        meta["conversion_method"] = conversion_method
+    if model_version:
+        meta["model_version"] = model_version
+    if ocr_used is not None:
+        meta["ocr_used"] = ocr_used
     (CACHE_DIR / f"{md5}.meta.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -613,20 +734,44 @@ def _read_cache(md5: str) -> tuple[str, dict[str, bytes], int, list[TocEntry]] |
     return None
 
 
-def _chunk_cache_key(parent_md5: str, chunk_index: int) -> str:
-    return f"{parent_md5}_p{MAX_PAGES_PER_CHUNK}_chunk_{chunk_index:03d}"
+def _read_cache_metadata(md5: str) -> dict:
+    meta_file = CACHE_DIR / f"{md5}.meta.json"
+    if not meta_file.exists():
+        return {}
+    try:
+        return json.loads(meta_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
 
 
-def _write_chunk_cache(parent_md5: str, chunk_index: int, zip_data: bytes) -> None:
+def _chunk_cache_key(
+    parent_md5: str,
+    chunk_index: int,
+    model_version: str = OCR_PDF_MODEL,
+) -> str:
+    model_suffix = "" if model_version == OCR_PDF_MODEL else f"_{model_version}"
+    return f"{parent_md5}_p{MAX_PAGES_PER_CHUNK}{model_suffix}_chunk_{chunk_index:03d}"
+
+
+def _write_chunk_cache(
+    parent_md5: str,
+    chunk_index: int,
+    zip_data: bytes,
+    model_version: str = OCR_PDF_MODEL,
+) -> None:
     """Persist one successful chunk conversion for cross-workflow retry."""
     CHUNK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    key = _chunk_cache_key(parent_md5, chunk_index)
+    key = _chunk_cache_key(parent_md5, chunk_index, model_version)
     (CHUNK_CACHE_DIR / f"{key}.zip").write_bytes(zip_data)
 
 
-def _read_chunk_cache(parent_md5: str, chunk_index: int) -> tuple[bytes, str, dict[str, bytes]] | None:
+def _read_chunk_cache(
+    parent_md5: str,
+    chunk_index: int,
+    model_version: str = OCR_PDF_MODEL,
+) -> tuple[bytes, str, dict[str, bytes]] | None:
     """Read one cached chunk conversion, returning raw ZIP plus extracted content."""
-    key = _chunk_cache_key(parent_md5, chunk_index)
+    key = _chunk_cache_key(parent_md5, chunk_index, model_version)
     zip_file = CHUNK_CACHE_DIR / f"{key}.zip"
     if not zip_file.exists():
         return None
@@ -669,19 +814,69 @@ def convert_single_pdf(
 
     if cached:
         markdown, images, page_count, toc = cached
+        cache_meta = _read_cache_metadata(md5)
+        conversion_method = cache_meta.get("conversion_method") or "cached-mineru"
+        model_version = cache_meta.get("model_version") or OCR_PDF_MODEL
+        ocr_used = cache_meta.get("ocr_used")
         print(f"  Cache hit: {md5}")
     else:
         page_count = get_page_count(pdf_path)
         print(f"  Page count: {page_count}")
 
+        plan = detect_pdf_conversion_plan(pdf_path)
+        conversion_method = plan.conversion_method
+        model_version = plan.model_version
+        ocr_used = plan.ocr_used
+        print(
+            f"  Detection: {plan.kind} PDF "
+            f"({plan.native_text_pages}/{plan.sampled_pages} sampled pages have reliable text)"
+        )
+        print(f"  MinerU route: {model_version} ({conversion_method})")
+
         client = MineruClient()
         if page_count > PAGE_THRESHOLD:
-            zip_data, markdown, images = _convert_large_pdf(client, pdf_path, page_count, md5)
+            zip_data, markdown, images = _convert_large_pdf(
+                client,
+                pdf_path,
+                page_count,
+                md5,
+                model_version=model_version,
+            )
         else:
-            zip_data, markdown, images = client.convert_pdf(pdf_path)
+            zip_data, markdown, images = client.convert_pdf(
+                pdf_path,
+                model_version=model_version,
+            )
+
+        if model_version == TEXT_PDF_MODEL and _markdown_needs_ocr_fallback(markdown, page_count):
+            print("  Fast text result looks incomplete; retrying with OCR/VLM...")
+            model_version = OCR_PDF_MODEL
+            conversion_method = "pdf-text-fallback-ocr"
+            ocr_used = True
+            if page_count > PAGE_THRESHOLD:
+                zip_data, markdown, images = _convert_large_pdf(
+                    client,
+                    pdf_path,
+                    page_count,
+                    md5,
+                    model_version=model_version,
+                )
+            else:
+                zip_data, markdown, images = client.convert_pdf(
+                    pdf_path,
+                    model_version=model_version,
+                )
 
         toc = extract_toc(pdf_path)
-        _write_cache(md5, zip_data, page_count, toc)
+        _write_cache(
+            md5,
+            zip_data,
+            page_count,
+            toc,
+            conversion_method=conversion_method,
+            model_version=model_version,
+            ocr_used=ocr_used,
+        )
         print(f"  Cached: {md5}")
 
     # Write images (from ZIP or cache) to book directory
@@ -713,6 +908,9 @@ def convert_single_pdf(
         pdf_md5=md5,
         page_count=page_count,
         updated_at=_utc_now_iso(),
+        conversion_method=conversion_method,
+        model_version=model_version,
+        ocr_used=ocr_used,
     )
 
     # Clear any prior failure record for this PDF
@@ -721,6 +919,80 @@ def convert_single_pdf(
     # Delete source PDF — the cache preserves everything needed for reconvert
     pdf_path.unlink(missing_ok=True)
     print(f"  Deleted source: {pdf_path.name}")
+
+
+def convert_single_docx(docx_path: Path, output_dir: Path) -> None:
+    """Convert a DOCX directly through MinerU's native Office parser."""
+    book_id = ensure_unique_content_id(
+        generate_book_id(docx_path),
+        output_dir.parent,
+        "book",
+    )
+    title = docx_path.stem
+    source_filename = docx_path.name
+    conversion_method = "docx-native"
+    model_version = DOCX_MODEL
+    ocr_used = False
+
+    print(f"Processing DOCX: {source_filename} -> {book_id}")
+    md5 = _file_md5(docx_path)
+    cached = _read_cache(md5)
+    images_dir = output_dir / book_id / "images"
+
+    if cached:
+        markdown, images, page_count, toc = cached
+        cache_meta = _read_cache_metadata(md5)
+        conversion_method = cache_meta.get("conversion_method") or conversion_method
+        model_version = cache_meta.get("model_version") or model_version
+        ocr_used = bool(cache_meta.get("ocr_used", False))
+        print(f"  Cache hit: {md5}")
+    else:
+        client = MineruClient()
+        zip_data, markdown, images = client.convert_document(
+            docx_path,
+            model_version=model_version,
+        )
+        page_count = 0
+        toc = []
+        _write_cache(
+            md5,
+            zip_data,
+            page_count,
+            toc,
+            conversion_method=conversion_method,
+            model_version=model_version,
+            ocr_used=ocr_used,
+        )
+        print(f"  Native DOCX conversion cached: {md5}")
+
+    if images:
+        images_dir.mkdir(parents=True, exist_ok=True)
+        for rel_path, data in images.items():
+            dest = output_dir / book_id / rel_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+        print(f"  Extracted {len(images)} images")
+
+    print("  Localizing images...")
+    markdown = localize_images(markdown, images_dir, CHAPTER_IMAGES_PREFIX)
+    markdown = _rewrite_chapter_image_paths(markdown, book_id)
+    chapters = _split_chapters(markdown, toc)
+    generate_book_structure(book_id, title, chapters, output_dir)
+
+    _write_book_metadata(
+        output_dir / book_id,
+        book_id=book_id,
+        source_pdf=source_filename,
+        pdf_md5=md5,
+        page_count=page_count,
+        updated_at=_utc_now_iso(),
+        conversion_method=conversion_method,
+        model_version=model_version,
+        ocr_used=ocr_used,
+    )
+    _remove_failure(source_filename, output_dir.parent)
+    docx_path.unlink(missing_ok=True)
+    print(f"  Deleted source: {docx_path.name}")
 
 
 def _merge_zips(zip_list: list[bytes]) -> bytes:
@@ -764,6 +1036,8 @@ def _cleanup_pdf_chunks(chunk_paths: list[Path]) -> None:
 
 def _convert_large_pdf(
     client: MineruClient, pdf_path: Path, page_count: int, parent_md5: str,
+    *,
+    model_version: str = OCR_PDF_MODEL,
 ) -> tuple[bytes, str, dict[str, bytes]]:
     """Split a large PDF into chunks, convert each via MinerU, and concatenate."""
     print(f"  Splitting {page_count}-page PDF into ~{MAX_PAGES_PER_CHUNK}-page chunks")
@@ -775,14 +1049,17 @@ def _convert_large_pdf(
         all_zips: list[bytes] = []
         for index, chunk_path in enumerate(chunk_paths):
             display_index = index + 1
-            cached = _read_chunk_cache(parent_md5, index)
+            cached = _read_chunk_cache(parent_md5, index, model_version)
             if cached:
                 zip_data, md, images = cached
                 print(f"  Chunk cache hit {display_index}/{len(chunk_paths)}: {chunk_path.name}")
             else:
                 print(f"  Converting chunk {display_index}/{len(chunk_paths)}: {chunk_path.name}")
-                zip_data, md, images = client.convert_pdf(chunk_path)
-                _write_chunk_cache(parent_md5, index, zip_data)
+                zip_data, md, images = client.convert_pdf(
+                    chunk_path,
+                    model_version=model_version,
+                )
+                _write_chunk_cache(parent_md5, index, zip_data, model_version)
             parts.append(md)
             all_images.update(images)
             all_zips.append(zip_data)

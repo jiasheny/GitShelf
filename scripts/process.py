@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Unified content processing pipeline.
 
-Handles four content types from input/:
+Handles five content types from input/:
   - .pdf  → book (chapters via MinerU API)
   - .epub → book (convert to PDF via Calibre, then reuse the PDF pipeline)
+  - .docx → book (native MinerU Office parsing, no OCR)
   - .md   → article (single markdown document)
   - .zip  → site (static site extraction)
 
@@ -34,6 +35,7 @@ except ImportError:
 try:
     from .convert import (
         convert_single_pdf,
+        convert_single_docx,
         detect_new_pdfs,
         ensure_unique_content_id,
         generate_book_id,
@@ -44,6 +46,7 @@ try:
 except ImportError:
     from convert import (
         convert_single_pdf,
+        convert_single_docx,
         detect_new_pdfs,
         ensure_unique_content_id,
         generate_book_id,
@@ -81,6 +84,17 @@ def _generate_id(path: Path) -> str:
 def detect_new_epubs(input_dir: Path) -> list[Path]:
     """Find .epub files in input_dir."""
     return sorted(input_dir.glob("*.epub"))
+
+
+def detect_new_docx(input_dir: Path) -> list[Path]:
+    """Find DOCX files in input_dir, regardless of extension casing."""
+    if not input_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in input_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == ".docx"
+    )
 
 
 def _resolve_upload_part(
@@ -476,7 +490,7 @@ def _resolve_input_file(input_dir: Path, filename: str) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Process content (PDF, EPUB, Markdown, ZIP).")
+    parser = argparse.ArgumentParser(description="Process content (PDF, EPUB, DOCX, Markdown, ZIP).")
     parser.add_argument("--input-dir", type=Path, default=Path("input"))
     parser.add_argument("--output-dir", type=Path, default=Path("docs"))
     args = parser.parse_args()
@@ -498,6 +512,7 @@ def main() -> None:
     # Collect jobs by type
     pdf_jobs: list[Path] = []
     epub_jobs: list[Path] = []
+    docx_jobs: list[Path] = []
     md_jobs: list[Path] = []
     zip_jobs: list[Path] = []
 
@@ -515,6 +530,8 @@ def main() -> None:
                 pdf_jobs = [path]
             elif ext == ".epub":
                 epub_jobs = [path]
+            elif ext == ".docx":
+                docx_jobs = [path]
             elif ext == ".md":
                 md_jobs = [path]
             elif ext == ".zip":
@@ -541,8 +558,9 @@ def main() -> None:
                 except FileNotFoundError as exc:
                     print(str(exc), file=sys.stderr)
                     sys.exit(1)
-            elif input_filename.lower().endswith(".epub"):
-                print(f"EPUB not found, attempting reconvert from cache: {input_filename}")
+            elif input_filename.lower().endswith((".epub", ".docx")):
+                kind = "DOCX" if input_filename.lower().endswith(".docx") else "EPUB"
+                print(f"{kind} not found, attempting reconvert from cache: {input_filename}")
                 try:
                     reconvert_from_cache(input_filename, books_dir)
                     build_manifest(
@@ -571,17 +589,19 @@ def main() -> None:
             *detect_new_pdfs(args.input_dir),
         ]))
         epub_jobs = detect_new_epubs(args.input_dir)
+        docx_jobs = detect_new_docx(args.input_dir)
         md_jobs = sorted(args.input_dir.glob("*.md"))
         zip_jobs = sorted(args.input_dir.glob("*.zip"))
 
-    total = len(pdf_jobs) + len(epub_jobs) + len(md_jobs) + len(zip_jobs)
+    total = len(pdf_jobs) + len(epub_jobs) + len(docx_jobs) + len(md_jobs) + len(zip_jobs)
     if total == 0:
         print("No new content found in input/. Nothing to do.")
         return
 
     print(
         f"Found {total} item(s) to process: {len(pdf_jobs)} PDF, "
-        f"{len(epub_jobs)} EPUB, {len(md_jobs)} MD, {len(zip_jobs)} ZIP"
+        f"{len(epub_jobs)} EPUB, {len(docx_jobs)} DOCX, "
+        f"{len(md_jobs)} MD, {len(zip_jobs)} ZIP"
     )
 
     failures: list[tuple[Path, Exception]] = []
@@ -609,6 +629,14 @@ def main() -> None:
         except Exception as exc:
             print(f"  FAILED: {epub_path.name}: {exc}", file=sys.stderr)
             failures.append((epub_path, exc))
+
+    # Process Word documents directly through MinerU's native DOCX parser
+    for docx_path in docx_jobs:
+        try:
+            convert_single_docx(docx_path, books_dir)
+        except Exception as exc:
+            print(f"  FAILED: {docx_path.name}: {exc}", file=sys.stderr)
+            failures.append((docx_path, exc))
 
     # Process Markdown files
     for md_path in md_jobs:

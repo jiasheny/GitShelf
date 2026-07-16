@@ -4,7 +4,7 @@
 
 GitHub-hosted content shelf. Fork, upload, done.
 
-> Fork this repo to get your own content platform on GitHub Pages. Upload PDFs or EPUBs (converted into online books), Markdown documents (rendered directly), or ZIP archives (deployed as static sites). Zero server cost.
+> Fork this repo to get your own content platform on GitHub Pages. Upload PDFs, EPUBs, or Word documents (converted into online books), Markdown documents (rendered directly), or ZIP archives (deployed as static sites). Zero server cost.
 
 ## Quick Start
 
@@ -17,14 +17,14 @@ GitHub-hosted content shelf. Fork, upload, done.
 
 Your site is now live at `https://<your-username>.github.io/gitshelf/`
 
-### 2. Add MinerU Token (for PDF and EPUB conversion)
+### 2. Add MinerU Token (for PDF, EPUB, and Word conversion)
 
 1. Register at [mineru.net](https://mineru.net) (free during beta)
 2. Copy your API token
 3. In your fork, go to **Settings > Secrets and variables > Actions**
 4. Click **New repository secret**, name it `MINERU_TOKEN`, paste the token
 
-> Needed for book uploads. EPUB files are converted to PDF first, then processed by the same MinerU pipeline as PDFs.
+> Needed for book uploads. EPUB files are converted to PDF first. DOCX files use MinerU's native Office parser, while PDFs are automatically routed between fast text parsing and OCR/VLM.
 
 ### 3. Password Protection (Optional)
 
@@ -42,6 +42,7 @@ Your site is now live at `https://<your-username>.github.io/gitshelf/`
 3. Upload a file:
    - **`.pdf`** — Converted to a multi-chapter book via MinerU API
    - **`.epub`** — Converted to PDF with Calibre, then processed through the same chapter pipeline as PDFs
+   - **`.docx`** — Parsed natively as a Word document without OCR
    - **`.md`** — Rendered directly as a document
    - **`.zip`** — Extracted as a static site (must contain `index.html`)
 4. Wait for GitHub Actions to process (progress shown in Actions tab)
@@ -58,8 +59,8 @@ Your site is now live at `https://<your-username>.github.io/gitshelf/`
 ## Features
 
 - **Reader** — Dark/light theme, chapter sidebar, keyboard navigation, code highlighting (Shiki), math rendering (KaTeX), responsive layout
-- **Admin** — Upload PDFs/EPUBs/Markdown/ZIPs from browser, catalog management (edit, publish, hide, archive, delete), search & filter
-- **Pipeline** — GitHub Actions processes uploads automatically, handles large PDFs by auto-chunking
+- **Admin** — Upload PDFs/EPUBs/DOCX/Markdown/ZIPs from browser, catalog management (edit, publish, hide, archive, delete), search & filter
+- **Pipeline** — GitHub Actions processes uploads automatically, detects text/scanned/mixed PDFs, and handles large PDFs by auto-chunking
 - **Homepage** — Tab-based filtering: All / Books / Documents / Sites
 
 ## How It Works
@@ -69,6 +70,7 @@ Upload content (browser → GitHub API → input/)
   → GitHub Actions runs scripts/process.py
   → .pdf:  MinerU API → Markdown → Split chapters → docs/books/{id}/
   → .epub: Calibre → PDF → MinerU API → Markdown → Split chapters → docs/books/{id}/
+  → .docx: MinerU native Office parser → Markdown → Split chapters → docs/books/{id}/
   → .md:   Copy to docs/articles/{id}/content.md
   → .zip:  Extract to docs/sites/{id}/
   → Build manifest → GitHub Pages deploys
@@ -90,7 +92,7 @@ python -m unittest discover -s tests/scripts -v # Python pipeline tests
 
 **What if MinerU stops being free?** Swap it by modifying `scripts/mineru_client.py`. Works with any PDF-to-Markdown tool.
 
-**Can I edit converted chapters?** Yes. Books uploaded as either PDF or EPUB end up as generated Markdown chapters in `docs/books/<id>/chapters/`, which you can edit and commit.
+**Can I edit converted chapters?** Yes. Books uploaded as PDF, EPUB, or DOCX end up as generated Markdown chapters in `docs/books/<id>/chapters/`, which you can edit and commit.
 
 **Can I upload a static site?** Yes. Package it as a `.zip` with `index.html` at the root and upload through the admin panel.
 

@@ -1,6 +1,6 @@
-"""MinerU API client for converting PDFs to Markdown.
+"""MinerU API client for converting documents to Markdown.
 
-Handles the full lifecycle: upload PDF via pre-signed URL, poll for
+Handles the full lifecycle: upload a document via pre-signed URL, poll for
 extraction completion, download and extract the resulting Markdown.
 """
 
@@ -16,6 +16,7 @@ import requests
 
 BASE_URL = "https://mineru.net/api/v4"
 MODEL_VERSION = "vlm"
+SUPPORTED_MODEL_VERSIONS = {"pipeline", "vlm"}
 
 
 class MineruError(Exception):
@@ -41,18 +42,20 @@ class MineruClient:
                 "No API token provided. Pass token= or set MINERU_TOKEN."
             )
 
-    def convert_pdf(
+    def convert_document(
         self,
-        pdf_path: Path,
+        document_path: Path,
         poll_interval: int = 10,
         timeout: int = 600,
+        model_version: str = MODEL_VERSION,
     ) -> tuple[bytes, str, dict[str, bytes]]:
-        """Upload a PDF, poll until extraction finishes, return raw ZIP + extracted content.
+        """Upload a document and return raw ZIP plus extracted Markdown and images.
 
         Args:
-            pdf_path: Path to the PDF file to convert.
+            document_path: Path to the PDF or DOCX file to convert.
             poll_interval: Seconds between status checks.
             timeout: Maximum seconds to wait for completion.
+            model_version: MinerU model to use (``pipeline`` or ``vlm``).
 
         Returns:
             A tuple of (zip_bytes, markdown_text, images_dict).
@@ -60,18 +63,38 @@ class MineruClient:
         Raises:
             MineruError: On API errors or extraction failure.
             MineruTimeoutError: If extraction does not finish in time.
-            FileNotFoundError: If pdf_path does not exist.
+            FileNotFoundError: If document_path does not exist.
         """
-        pdf_path = Path(pdf_path)
-        if not pdf_path.is_file():
-            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+        document_path = Path(document_path)
+        if not document_path.is_file():
+            raise FileNotFoundError(f"Document not found: {document_path}")
+        if model_version not in SUPPORTED_MODEL_VERSIONS:
+            raise ValueError(f"Unsupported MinerU model version: {model_version}")
 
-        batch_id, upload_url = self._request_upload_url(pdf_path.name)
-        self._upload_file(upload_url, pdf_path)
+        batch_id, upload_url = self._request_upload_url(
+            document_path.name,
+            model_version=model_version,
+        )
+        self._upload_file(upload_url, document_path)
         zip_url = self._poll_until_done(batch_id, poll_interval, timeout)
         zip_data = _download_zip(zip_url)
         markdown, images = extract_zip_contents(zip_data)
         return zip_data, markdown, images
+
+    def convert_pdf(
+        self,
+        pdf_path: Path,
+        poll_interval: int = 10,
+        timeout: int = 600,
+        model_version: str = MODEL_VERSION,
+    ) -> tuple[bytes, str, dict[str, bytes]]:
+        """Backward-compatible PDF wrapper around :meth:`convert_document`."""
+        return self.convert_document(
+            pdf_path,
+            poll_interval=poll_interval,
+            timeout=timeout,
+            model_version=model_version,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -83,7 +106,12 @@ class MineruClient:
             "Content-Type": "application/json",
         }
 
-    def _request_upload_url(self, filename: str) -> tuple[str, str]:
+    def _request_upload_url(
+        self,
+        filename: str,
+        *,
+        model_version: str = MODEL_VERSION,
+    ) -> tuple[str, str]:
         """Request a pre-signed upload URL from the MinerU API.
 
         Returns (batch_id, upload_url).
@@ -91,7 +119,7 @@ class MineruClient:
         url = f"{BASE_URL}/file-urls/batch"
         payload = {
             "files": [{"name": filename, "data_id": filename[:128]}],
-            "model_version": MODEL_VERSION,
+            "model_version": model_version,
             "enable_formula": True,
             "enable_table": True,
         }
@@ -104,9 +132,9 @@ class MineruClient:
             raise MineruError("API returned no upload URLs")
         return batch_id, file_urls[0]
 
-    def _upload_file(self, upload_url: str, pdf_path: Path) -> None:
-        """PUT the PDF binary to the pre-signed upload URL."""
-        with pdf_path.open("rb") as f:
+    def _upload_file(self, upload_url: str, document_path: Path) -> None:
+        """PUT the document binary to the pre-signed upload URL."""
+        with document_path.open("rb") as f:
             resp = requests.put(upload_url, data=f, timeout=300)
         if resp.status_code != 200:
             raise MineruError(
