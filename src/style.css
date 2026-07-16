@@ -900,6 +900,16 @@ button {
   color: var(--color-accent-text);
 }
 
+.download-progress {
+  width: min(520px, 100%);
+  margin: var(--space-4) auto 0;
+  text-align: left;
+}
+
+.download-progress .progress-text {
+  text-align: center;
+}
+
 .book-overview-toc {
   list-style: none;
   margin: 0;
