@@ -206,6 +206,18 @@ class PdfChunkingTest(unittest.TestCase):
                 patch.object(convert, "_pdf_md5", return_value="md5"),
                 patch.object(convert, "_read_cache", return_value=None),
                 patch.object(convert, "get_page_count", return_value=201),
+                patch.object(
+                    convert,
+                    "detect_pdf_conversion_plan",
+                    return_value=convert.PdfConversionPlan(
+                        kind="scanned",
+                        model_version="vlm",
+                        conversion_method="pdf-ocr",
+                        ocr_used=True,
+                        sampled_pages=10,
+                        native_text_pages=0,
+                    ),
+                ),
                 patch.object(convert, "MineruClient", return_value=Mock()),
                 patch.object(
                     convert,
@@ -295,13 +307,134 @@ class PdfChunkingTest(unittest.TestCase):
                 )
 
             self.assertEqual(read_cache_mock.call_count, 2)
-            client.convert_pdf.assert_called_once_with(chunk_2)
-            write_cache_mock.assert_called_once_with("parent-md5", 1, fresh_zip)
+            client.convert_pdf.assert_called_once_with(chunk_2, model_version="vlm")
+            write_cache_mock.assert_called_once_with("parent-md5", 1, fresh_zip, "vlm")
             self.assertEqual(markdown, "# Cached chunk\n\n# Fresh chunk")
             self.assertEqual(images["images/cached.png"], b"cached")
             self.assertEqual(images["images/fresh.png"], b"fresh")
             with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
                 self.assertEqual(len([n for n in zf.namelist() if n.endswith(".md")]), 2)
+
+
+class SmartDocumentRoutingTest(unittest.TestCase):
+    def _write_pdf(self, path: Path, native_flags: list[bool]) -> None:
+        document = convert.fitz.open()
+        try:
+            for index, has_text in enumerate(native_flags):
+                page = document.new_page()
+                if has_text:
+                    page.insert_textbox(
+                        convert.fitz.Rect(50, 50, 550, 780),
+                        (f"Page {index} searchable native text. " * 20),
+                        fontsize=11,
+                    )
+            document.save(path)
+        finally:
+            document.close()
+
+    def test_detects_searchable_text_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pdf_path = Path(tmp_dir) / "text.pdf"
+            self._write_pdf(pdf_path, [True] * 10)
+
+            plan = convert.detect_pdf_conversion_plan(pdf_path)
+
+            self.assertEqual(plan.kind, "text")
+            self.assertEqual(plan.model_version, "pipeline")
+            self.assertFalse(plan.ocr_used)
+
+    def test_detects_scanned_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pdf_path = Path(tmp_dir) / "scan.pdf"
+            self._write_pdf(pdf_path, [False] * 10)
+
+            plan = convert.detect_pdf_conversion_plan(pdf_path)
+
+            self.assertEqual(plan.kind, "scanned")
+            self.assertEqual(plan.model_version, "vlm")
+            self.assertTrue(plan.ocr_used)
+
+    def test_detects_mixed_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pdf_path = Path(tmp_dir) / "mixed.pdf"
+            self._write_pdf(pdf_path, [True] * 5 + [False] * 5)
+
+            plan = convert.detect_pdf_conversion_plan(pdf_path)
+
+            self.assertEqual(plan.kind, "mixed")
+            self.assertEqual(plan.conversion_method, "pdf-mixed-ocr")
+
+    def test_flags_incomplete_fast_markdown_for_ocr_retry(self) -> None:
+        self.assertTrue(convert._markdown_needs_ocr_fallback("# Empty", 20))
+        self.assertFalse(convert._markdown_needs_ocr_fallback("useful text " * 500, 20))
+
+    def test_text_pdf_retries_with_vlm_when_fast_result_is_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            pdf_path = root / "input.pdf"
+            pdf_path.write_bytes(b"pdf")
+            client = Mock()
+            client.convert_pdf.side_effect = [
+                (b"pipeline", "# Empty", {}),
+                (b"vlm", "# Complete\n\n" + "useful text " * 100, {}),
+            ]
+            plan = convert.PdfConversionPlan(
+                kind="text",
+                model_version="pipeline",
+                conversion_method="pdf-native-text",
+                ocr_used=False,
+                sampled_pages=10,
+                native_text_pages=10,
+            )
+
+            with (
+                patch.object(convert, "_pdf_md5", return_value="md5"),
+                patch.object(convert, "_read_cache", return_value=None),
+                patch.object(convert, "get_page_count", return_value=10),
+                patch.object(convert, "detect_pdf_conversion_plan", return_value=plan),
+                patch.object(convert, "MineruClient", return_value=client),
+                patch.object(convert, "extract_toc", return_value=[]),
+                patch.object(convert, "_write_cache") as cache_mock,
+                patch.object(convert, "localize_images", side_effect=lambda markdown, *_: markdown),
+                patch.object(convert, "generate_book_structure"),
+                patch.object(convert, "_write_book_metadata") as metadata_mock,
+                patch.object(convert, "_remove_failure"),
+            ):
+                convert.convert_single_pdf(pdf_path, root / "books")
+
+            self.assertEqual(client.convert_pdf.call_count, 2)
+            self.assertEqual(client.convert_pdf.call_args_list[0].kwargs["model_version"], "pipeline")
+            self.assertEqual(client.convert_pdf.call_args_list[1].kwargs["model_version"], "vlm")
+            self.assertEqual(cache_mock.call_args.kwargs["conversion_method"], "pdf-text-fallback-ocr")
+            self.assertTrue(metadata_mock.call_args.kwargs["ocr_used"])
+
+    def test_docx_uses_native_mineru_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            docx_path = root / "input" / "manual.docx"
+            books_dir = root / "docs" / "books"
+            docx_path.parent.mkdir(parents=True)
+            books_dir.mkdir(parents=True)
+            docx_path.write_bytes(b"docx")
+            client = Mock()
+            client.convert_document.return_value = (b"zip", "# Manual\n\nBody", {})
+
+            with (
+                patch.object(convert, "_file_md5", return_value="docx-md5"),
+                patch.object(convert, "_read_cache", return_value=None),
+                patch.object(convert, "MineruClient", return_value=client),
+                patch.object(convert, "_write_cache"),
+                patch.object(convert, "localize_images", side_effect=lambda markdown, *_: markdown),
+                patch.object(convert, "generate_book_structure"),
+                patch.object(convert, "_write_book_metadata") as metadata_mock,
+                patch.object(convert, "_remove_failure"),
+            ):
+                convert.convert_single_docx(docx_path, books_dir)
+
+            client.convert_document.assert_called_once_with(docx_path, model_version="pipeline")
+            self.assertEqual(metadata_mock.call_args.kwargs["conversion_method"], "docx-native")
+            self.assertFalse(metadata_mock.call_args.kwargs["ocr_used"])
+            self.assertFalse(docx_path.exists())
 
 
 class FailureTrackingTest(unittest.TestCase):

@@ -4,7 +4,7 @@
 
 基于 GitHub 的内容托管平台。Fork，上传，搞定。
 
-> Fork 本仓库即可拥有自己的内容平台。上传 PDF 或 EPUB（转换后发布为在线书籍）、Markdown 文档（直接渲染）、ZIP 压缩包（部署为静态站点），全部托管在 GitHub Pages 上。零服务器成本。
+> Fork 本仓库即可拥有自己的内容平台。上传 PDF、EPUB 或 Word（转换后发布为在线书籍）、Markdown 文档（直接渲染）、ZIP 压缩包（部署为静态站点），全部托管在 GitHub Pages 上。零服务器成本。
 
 ## 快速开始
 
@@ -17,14 +17,14 @@
 
 站点已上线：`https://<your-username>.github.io/gitshelf/`
 
-### 2. 添加 MinerU Token（用于 PDF 和 EPUB 转换）
+### 2. 添加 MinerU Token（用于 PDF、EPUB 和 Word 转换）
 
 1. 在 [mineru.net](https://mineru.net) 注册（测试期免费）
 2. 复制 API Token
 3. 在你的 Fork 中，进入 **Settings > Secrets and variables > Actions**
 4. 点击 **New repository secret**，名称填 `MINERU_TOKEN`，粘贴 Token
 
-> 书籍上传都需要。EPUB 会先经由 Calibre 转成 PDF，再进入和 PDF 相同的 MinerU 处理流水线。
+> 书籍上传都需要。EPUB 会先经由 Calibre 转成 PDF；DOCX 使用 MinerU 原生 Office 解析，PDF 则会自动选择文字解析或 OCR/VLM。
 
 ### 3. 密码保护（可选）
 
@@ -42,6 +42,7 @@
 3. 上传文件：
    - **`.pdf`** — 通过 MinerU API 转换为多章节书籍
    - **`.epub`** — 先用 Calibre 转成 PDF，再复用和 PDF 相同的章节转换流程
+   - **`.docx`** — 直接按 Word 原生结构解析，不使用 OCR
    - **`.md`** — 直接作为文档渲染展示
    - **`.zip`** — 解压为静态站点（需包含 `index.html`）
 4. 等待 GitHub Actions 处理完成
@@ -58,8 +59,8 @@
 ## 功能
 
 - **阅读器** — 明暗主题、章节侧边栏、键盘导航、代码高亮（Shiki）、数学公式（KaTeX）、响应式布局
-- **管理面板** — 上传 PDF/EPUB/Markdown/ZIP、目录管理（编辑、发布、隐藏、归档、删除）、搜索和筛选
-- **处理流水线** — GitHub Actions 自动处理上传内容，大 PDF 自动分块转换
+- **管理面板** — 上传 PDF/EPUB/DOCX/Markdown/ZIP、目录管理（编辑、发布、隐藏、归档、删除）、搜索和筛选
+- **处理流水线** — GitHub Actions 自动识别文字型、扫描型和混合型 PDF，大 PDF 自动分块转换
 - **首页** — 标签页筛选：全部 / 书籍 / 文档 / 站点
 
 ## 工作原理
@@ -69,6 +70,7 @@
   → GitHub Actions 运行 scripts/process.py
   → .pdf:  MinerU API → Markdown → 拆分章节 → docs/books/{id}/
   → .epub: Calibre → PDF → MinerU API → Markdown → 拆分章节 → docs/books/{id}/
+  → .docx: MinerU 原生 Office 解析 → Markdown → 拆分章节 → docs/books/{id}/
   → .md:   复制到 docs/articles/{id}/content.md
   → .zip:  解压到 docs/sites/{id}/
   → 构建 manifest → GitHub Pages 部署
@@ -90,7 +92,7 @@ python -m unittest discover -s tests/scripts -v # Python 流水线测试
 
 **MinerU 收费了怎么办？** 修改 `scripts/mineru_client.py` 即可替换，兼容任何 PDF 转 Markdown 工具。
 
-**可以手动编辑转换后的章节吗？** 可以。无论上传的是 PDF 还是 EPUB，最终都会生成 `docs/books/<id>/chapters/` 下的 Markdown 章节文件，可以直接编辑并提交。
+**可以手动编辑转换后的章节吗？** 可以。上传 PDF、EPUB 或 DOCX 后，最终都会生成 `docs/books/<id>/chapters/` 下的 Markdown 章节文件，可以直接编辑并提交。
 
 **可以上传静态站点吗？** 可以。将站点打包为 `.zip`（根目录需包含 `index.html`），通过管理面板上传即可。
 

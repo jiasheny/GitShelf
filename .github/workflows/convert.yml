@@ -7,11 +7,13 @@ on:
       - "input/**"
       - "scripts/convert.py"
       - "scripts/process.py"
+      - "scripts/mineru_client.py"
+      - "scripts/build_manifest.py"
       - ".github/workflows/convert.yml"
   workflow_dispatch:
     inputs:
       filename:
-        description: "Specific filename in input/ (e.g. book.pdf, book.epub, notes.md, site.zip)"
+        description: "Specific filename in input/ (e.g. book.pdf, book.epub, book.docx, notes.md, site.zip)"
         required: false
         type: string
 

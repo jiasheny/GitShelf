@@ -177,5 +177,18 @@ class EpubProcessingTest(unittest.TestCase):
             build_manifest_mock.assert_called_once()
 
 
+class DocxDetectionTest(unittest.TestCase):
+    def test_detect_new_docx_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_dir = Path(tmp_dir)
+            lower = input_dir / "one.docx"
+            upper = input_dir / "two.DOCX"
+            lower.write_bytes(b"one")
+            upper.write_bytes(b"two")
+            (input_dir / "ignore.doc").write_bytes(b"old word")
+
+            self.assertEqual(process.detect_new_docx(input_dir), [lower, upper])
+
+
 if __name__ == "__main__":
     unittest.main()

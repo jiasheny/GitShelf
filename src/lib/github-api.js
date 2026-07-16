@@ -12,7 +12,7 @@ const VISIBILITY_VALUES = ['published', 'hidden', 'archived'];
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MAX_LARGE_PDF_SIZE = 500 * 1024 * 1024;
 const LARGE_PDF_CHUNK_SIZE = 15 * 1024 * 1024;
-const ACCEPTED_EXTENSIONS = ['pdf', 'epub', 'md', 'zip'];
+const ACCEPTED_EXTENSIONS = ['pdf', 'epub', 'docx', 'md', 'zip'];
 
 const CONTENT_TYPE_DIRS = {
   book: 'docs/books',
@@ -145,6 +145,9 @@ function normalizeItemRecord(raw) {
     chapters_count: normalizeNullableNumber(m.chapters_count),
     word_count: normalizeNullableNumber(m.word_count),
     source_format: String(m.source_format || '').trim() || null,
+    conversion_method: String(m.conversion_method || '').trim() || null,
+    model_version: String(m.model_version || '').trim() || null,
+    ocr_used: typeof m.ocr_used === 'boolean' ? m.ocr_used : null,
     created_at: String(m.created_at || '').trim() || null,
     updated_at: String(m.updated_at || m.created_at || '').trim() || null,
     source: String(m.source || '').trim() || null,
@@ -202,6 +205,9 @@ function serializeCatalog(items) {
     manual_order: b.manual_order, visibility: normalizeVisibility(b.visibility),
     source: b.source || '', entry: b.entry || undefined,
     source_format: b.source_format || undefined,
+    conversion_method: b.conversion_method || undefined,
+    model_version: b.model_version || undefined,
+    ocr_used: typeof b.ocr_used === 'boolean' ? b.ocr_used : undefined,
     chapters_count: b.chapters_count, word_count: b.word_count,
     created_at: b.created_at, updated_at: b.updated_at,
   }))};

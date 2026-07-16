@@ -210,6 +210,9 @@ def _build_book_entry(book_dir: Path) -> dict:
         "updated_at": updated_at,
         "source": source,
         "page_count": meta.get("page_count"),
+        "conversion_method": meta.get("conversion_method"),
+        "model_version": meta.get("model_version"),
+        "ocr_used": meta.get("ocr_used"),
     }
 
 
@@ -309,6 +312,9 @@ def build_manifest(
                 "updated_at": generated["updated_at"],
                 "source": metadata.get("source") or generated["source"],
                 "page_count": generated["page_count"],
+                "conversion_method": generated["conversion_method"],
+                "model_version": generated["model_version"],
+                "ocr_used": generated["ocr_used"],
             }
             catalog_entries.append(entry)
 

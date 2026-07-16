@@ -82,6 +82,17 @@ function getContentTypeLabel(item) {
   return CONTENT_TYPE_LABELS[getItemType(item)] || 'Content';
 }
 
+function getConversionLabel(item) {
+  const labels = {
+    'docx-native': 'Native Word',
+    'pdf-native-text': 'Text PDF',
+    'pdf-ocr': 'OCR PDF',
+    'pdf-mixed-ocr': 'Mixed PDF + OCR',
+    'pdf-text-fallback-ocr': 'OCR fallback',
+  };
+  return labels[item?.conversion_method] || '';
+}
+
 // --- Auth View ---
 function AuthView({ onAuthenticated }) {
   const [token, setToken] = useState('');
@@ -197,7 +208,7 @@ function UploadSection({ repo, disabled }) {
           <svg class="upload-dropzone-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M32 32l-8-8-8 8M24 24v18M40.78 37.09A10 10 0 0 0 36 18h-2.52A16 16 0 1 0 8 32.29" />
           </svg>
-          <div class="upload-dropzone-text">Drop PDF, EPUB, Markdown, or ZIP here or click to browse</div>
+          <div class="upload-dropzone-text">Drop PDF, EPUB, Word (.docx), Markdown, or ZIP here or click to browse</div>
           <div class="upload-dropzone-hint">PDF up to 500 MB · other files up to 100 MB</div>
         </div>
       )}
@@ -612,7 +623,7 @@ function CatalogSection({ repo }) {
               <svg class="admin-empty-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M8 6h10a4 4 0 0 1 4 4v28a3 3 0 0 0-3-3H8V6zM40 6H30a4 4 0 0 0-4 4v28a3 3 0 0 1 3-3h11V6z" />
               </svg>
-              <p class="admin-empty-text">No content yet. Upload a PDF, EPUB, Markdown file, or ZIP to get started.</p>
+              <p class="admin-empty-text">No content yet. Upload a PDF, EPUB, Word (.docx), Markdown file, or ZIP to get started.</p>
             </>
           ) : (
             <>
@@ -662,7 +673,9 @@ function CatalogSection({ repo }) {
                   </div>
                   <div class="admin-grid-cell admin-grid-cell--source">
                     <span class="admin-source-file">{item.source || '\u2014'}</span>
-                    <span class="admin-source-time">{timeAgo(item.updated_at) || '\u2014'}</span>
+                    <span class="admin-source-time">
+                      {[getConversionLabel(item), timeAgo(item.updated_at)].filter(Boolean).join(' · ') || '\u2014'}
+                    </span>
                   </div>
                   <div class="admin-grid-cell admin-grid-cell--stats">
                     <span class="admin-stat-value">{formatCompact(item.chapters_count)}</span>
@@ -706,6 +719,7 @@ function CatalogSection({ repo }) {
                 </div>
                 <div class="admin-catalog-card-meta">
                   {item.source && <span class="admin-source-file">{item.source}</span>}
+                  {getConversionLabel(item) && <span class="admin-book-subtle">{getConversionLabel(item)}</span>}
                   <span class="admin-book-subtle">
                     {[item.chapters_count != null && `${formatCompact(item.chapters_count)} ch`, item.word_count != null && `${formatCompact(item.word_count)} words`].filter(Boolean).join(' \u00b7 ')}
                   </span>

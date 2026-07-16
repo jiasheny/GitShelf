@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uploadContent } from '../../src/lib/github-api';
+import { ACCEPTED_EXTENSIONS, uploadContent } from '../../src/lib/github-api';
 
 class FakeXMLHttpRequest {
   static latest;
@@ -42,6 +42,11 @@ beforeEach(() => {
 });
 
 describe('uploadContent progress', () => {
+  it('accepts modern Word documents', () => {
+    expect(ACCEPTED_EXTENSIONS).toContain('docx');
+    expect(ACCEPTED_EXTENSIONS).not.toContain('doc');
+  });
+
   it('reports upload progress and commits through the GitHub contents API', async () => {
     const updates = [];
     const file = new File(['hello'], 'book.pdf', { type: 'application/pdf' });
