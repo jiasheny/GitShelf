@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'preact/hooks';
 import { fetchToc, fetchManifest, fetchText, flattenChapters, formatWordCount } from '../lib/api';
+import {
+  createBookZip,
+  createTextOnlyMarkdown,
+  fetchBookImages,
+  mergeChapterMarkdown,
+  prepareMarkdownWithImages,
+} from '../lib/bookDownload';
 
 function safeFilename(value) {
   return String(value || 'book')
@@ -12,7 +19,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
   const [tocData, setTocData] = useState(null);
   const [bookMeta, setBookMeta] = useState(null);
   const [error, setError] = useState(null);
-  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
   const [downloadError, setDownloadError] = useState('');
 
   useEffect(() => {
@@ -58,30 +65,67 @@ export function BookOverview({ bookId, onTocLoaded }) {
   const firstChapter = items.find((item) => item.slug) || null;
   const encodedBookId = encodeURIComponent(bookId);
 
-  async function handleDownload() {
-    setDownloading(true);
+  const downloading = Boolean(downloadProgress);
+
+  async function loadMergedMarkdown() {
+    const chapters = flattenChapters(items);
+    if (chapters.length === 0) throw new Error('No chapters available.');
+    const parts = await Promise.all(chapters.map((chapter) => (
+      fetchText(`books/${bookId}/chapters/${chapter.slug}.md`)
+    )));
+    return mergeChapterMarkdown(parts);
+  }
+
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleTextDownload() {
+    setDownloadProgress({ type: 'text', message: 'Preparing text-only Markdown...', percent: 20 });
     setDownloadError('');
     try {
-      const chapters = flattenChapters(items);
-      if (chapters.length === 0) throw new Error('No chapters available.');
-      const parts = await Promise.all(chapters.map(async (chapter) => {
-        const text = await fetchText(`books/${bookId}/chapters/${chapter.slug}.md`);
-        return text.trim();
-      }));
-      const markdown = `${parts.filter(Boolean).join('\n\n---\n\n')}\n`;
+      const markdown = createTextOnlyMarkdown(await loadMergedMarkdown());
       const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${safeFilename(tocData.title || bookId)}.md`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, `${safeFilename(tocData.title || bookId)}.md`);
     } catch (err) {
       setDownloadError(err.message || 'Download failed.');
     } finally {
-      setDownloading(false);
+      setDownloadProgress(null);
+    }
+  }
+
+  async function handleFullDownload() {
+    setDownloadProgress({ type: 'full', message: 'Preparing chapters...', percent: 5 });
+    setDownloadError('');
+    try {
+      const merged = await loadMergedMarkdown();
+      const { markdown, imagePaths } = prepareMarkdownWithImages(merged, bookId);
+      setDownloadProgress({
+        type: 'full',
+        message: imagePaths.length ? `Downloading images 0/${imagePaths.length}...` : 'Creating ZIP...',
+        percent: imagePaths.length ? 10 : 90,
+      });
+      const images = await fetchBookImages(bookId, imagePaths, (completed, total) => {
+        setDownloadProgress({
+          type: 'full',
+          message: `Downloading images ${completed}/${total}...`,
+          percent: 10 + Math.round((completed / total) * 80),
+        });
+      });
+      setDownloadProgress({ type: 'full', message: 'Creating ZIP...', percent: 95 });
+      const filename = safeFilename(tocData.title || bookId);
+      saveBlob(await createBookZip(markdown, filename, images), `${filename}.zip`);
+    } catch (err) {
+      setDownloadError(err.message || 'Download failed.');
+    } finally {
+      setDownloadProgress(null);
     }
   }
 
@@ -100,10 +144,21 @@ export function BookOverview({ bookId, onTocLoaded }) {
               Start Reading
             </a>
           )}
-          <button class="book-overview-cta btn btn-secondary" type="button" onClick={handleDownload} disabled={downloading}>
-            {downloading ? 'Preparing Markdown…' : 'Download Markdown'}
+          <button class="book-overview-cta btn btn-secondary" type="button" onClick={handleTextDownload} disabled={downloading}>
+            Download text-only MD
+          </button>
+          <button class="book-overview-cta btn btn-secondary" type="button" onClick={handleFullDownload} disabled={downloading}>
+            Download MD + Images (ZIP)
           </button>
         </div>
+        {downloadProgress && (
+          <div class="download-progress" aria-live="polite">
+            <div class="progress-bar" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={downloadProgress.percent}>
+              <div class="progress-bar-fill" style={{ width: `${downloadProgress.percent}%` }} />
+            </div>
+            <p class="progress-text">{downloadProgress.message}</p>
+          </div>
+        )}
         {downloadError && <p class="admin-error" role="alert">{downloadError}</p>}
       </div>
 
