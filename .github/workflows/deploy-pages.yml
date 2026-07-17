@@ -7,10 +7,6 @@ on:
       - "input/**"
       - "uploads/**"
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Process Content"]
-    types: [completed]
-    branches: [main]
 
 permissions:
   pages: write
@@ -18,13 +14,10 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

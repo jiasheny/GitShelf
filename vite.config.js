@@ -41,12 +41,16 @@ function serveDocsData() {
 
 // Preserve docs/ content data while dropping stale hashed frontend bundles on rebuild.
 function cleanDocsAssets() {
-  const assetsDir = resolve(__dirname, 'docs/assets');
+  let assetsDir = '';
   return {
     name: 'clean-docs-assets',
     apply: 'build',
+    configResolved(config) {
+      const outDir = resolve(config.root, config.build.outDir);
+      assetsDir = resolve(outDir, config.build.assetsDir);
+    },
     buildStart() {
-      rmSync(assetsDir, { recursive: true, force: true });
+      if (assetsDir) rmSync(assetsDir, { recursive: true, force: true });
     },
   };
 }

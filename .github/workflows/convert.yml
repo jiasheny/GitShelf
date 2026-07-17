@@ -9,6 +9,7 @@ on:
       - "scripts/process.py"
       - "scripts/mineru_client.py"
       - "scripts/build_manifest.py"
+      - "docs/failures.json"
       - ".github/workflows/convert.yml"
   workflow_dispatch:
     inputs:
@@ -19,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: content-processing
@@ -30,43 +32,142 @@ jobs:
     timeout-minutes: 180
     env:
       MINERU_TOKEN: ${{ secrets.MINERU_TOKEN }}
+      GITSHELF_CACHE_DIR: cache/markdown
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: main
+          fetch-depth: 20
+
+      - name: Select uploaded file
+        id: target
+        env:
+          REQUESTED_FILENAME: ${{ inputs.filename }}
+        run: |
+          filename="$REQUESTED_FILENAME"
+          should_process=true
+          should_save_cache=true
+          if [ -z "$filename" ] && [ "${{ github.event_name }}" = "push" ]; then
+            event_sha="$GITHUB_SHA"
+            if ! git cat-file -e "${event_sha}^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=2 origin "$event_sha"
+            fi
+            mapfile -d '' changed_inputs < <(
+              git -c core.quotePath=false diff-tree --no-commit-id --name-only \
+                --diff-filter=AM -r -z "$event_sha" -- input/
+            )
+            if [ "${#changed_inputs[@]}" -eq 1 ]; then
+              filename="${changed_inputs[0]#input/}"
+            elif [ "${#changed_inputs[@]}" -eq 0 ]; then
+              pending_input=$(find input -maxdepth 1 -type f \( \
+                -iname '*.pdf' -o -iname '*.epub' -o -iname '*.docx' -o \
+                -iname '*.md' -o -iname '*.zip' -o -iname '*.parts.json' \
+              \) -print -quit 2>/dev/null || true)
+              if [ -n "$pending_input" ]; then
+                echo "Pending uploads remain; processing the full input queue."
+              else
+                should_process=false
+                mapfile -d '' pipeline_changes < <(
+                  git diff-tree --no-commit-id --name-only --diff-filter=AM -r -z "$event_sha" -- \
+                    scripts/ .github/workflows/convert.yml
+                )
+                if [ "${#pipeline_changes[@]}" -eq 0 ]; then
+                  should_save_cache=false
+                fi
+              fi
+            else
+              echo "Multiple input files changed; processing the full input queue."
+            fi
+          fi
+          lower_filename="${filename,,}"
+          needs_calibre=false
+          if [ -z "$filename" ] || [[ "$lower_filename" == *.epub ]]; then
+            needs_calibre=true
+          fi
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          echo "should_process=$should_process" >> "$GITHUB_OUTPUT"
+          echo "should_save_cache=$should_save_cache" >> "$GITHUB_OUTPUT"
+          echo "needs_calibre=$needs_calibre" >> "$GITHUB_OUTPUT"
+
+      - name: Restore short-term conversion cache
+        if: steps.target.outputs.should_save_cache == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/markdown
+          key: gitshelf-conversion-v2-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gitshelf-conversion-v2-${{ runner.os }}-
 
       - name: Set up Python 3.11
+        if: steps.target.outputs.should_process == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
+        if: steps.target.outputs.should_process == 'true'
         run: pip install -r requirements.txt
 
       - name: Install Calibre
+        if: steps.target.outputs.should_process == 'true' && steps.target.outputs.needs_calibre == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y calibre fonts-noto-cjk
 
       - name: Process content
+        id: process
+        if: steps.target.outputs.should_process == 'true'
+        continue-on-error: true
         run: python scripts/process.py
         env:
-          INPUT_FILENAME: ${{ inputs.filename }}
+          INPUT_FILENAME: ${{ steps.target.outputs.filename }}
+
+      - name: Save short-term conversion cache
+        if: always() && steps.target.outputs.should_save_cache == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: cache/markdown
+          key: gitshelf-conversion-v2-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Keep only the two newest conversion caches
+        if: always() && steps.target.outputs.should_save_cache == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/caches?per_page=100" \
+            --jq '[.actions_caches[] | select(.key | startswith("gitshelf-conversion-v2-${{ runner.os }}-"))] | sort_by(.created_at) | reverse | .[2:] | .[].id' |
+          while read -r cache_id; do
+            if [ -n "$cache_id" ]; then
+              gh api --method DELETE "repos/${{ github.repository }}/actions/caches/$cache_id"
+            fi
+          done
 
       - name: Commit and push results
+        if: always() && steps.target.outputs.should_process == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdir -p input uploads docs cache
-          for path in input uploads docs cache; do
+          mkdir -p input uploads docs
+          for path in input uploads docs; do
             git add -A "$path"
           done
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
             CHANGED=$(git diff --cached --name-only -- docs/ | head -1 | sed 's|docs/||;s|/.*||')
-            git commit -m "feat(pipeline): process ${CHANGED:-content}"
+            COMMIT_MESSAGE="feat(pipeline): process ${CHANGED:-content}"
+            while IFS= read -r -d '' source_path; do
+              SOURCE_SHA=$(git log -1 --format=%H -- "$source_path" || true)
+              if [ -n "$SOURCE_SHA" ] && [[ "$COMMIT_MESSAGE" != *"GitShelf-Source: $SOURCE_SHA"* ]]; then
+                COMMIT_MESSAGE+=$'\n\nGitShelf-Source: '
+                COMMIT_MESSAGE+="$SOURCE_SHA"
+              fi
+            done < <(git diff --cached --name-only --diff-filter=D -z -- input/)
+            git commit -m "$COMMIT_MESSAGE"
             for attempt in 1 2 3; do
               git pull --rebase origin main
               if git push origin HEAD:main; then
@@ -78,3 +179,9 @@ jobs:
             echo "Failed to push processed content after 3 attempts"
             exit 1
           fi
+
+      - name: Report processing failure
+        if: always() && steps.target.outputs.should_process == 'true' && steps.process.outcome == 'failure'
+        run: |
+          echo "Content processing failed after preserving cache and failure records."
+          exit 1

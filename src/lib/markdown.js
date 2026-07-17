@@ -1,6 +1,7 @@
 import markdownit from 'markdown-it';
 import texmath from 'markdown-it-texmath';
 import katex from 'katex';
+import DOMPurify from 'dompurify';
 
 function slugify(text) {
   return text
@@ -35,18 +36,6 @@ function resolveImageSrc(src, assetBase) {
   return `${assetBase.replace(/\/+$/, '')}/images/${match[1]}`;
 }
 
-/** Strip dangerous HTML while allowing safe structural tags (tables, formatting, etc.) */
-function sanitizeHtml(html) {
-  // Remove dangerous tags and their content
-  html = html.replace(/<(script|style|iframe|object|embed|form|textarea|select)\b[^]*?<\/\1>/gi, '');
-  // Remove self-closing / void dangerous tags
-  html = html.replace(/<(script|style|iframe|object|embed|input|link|meta)\b[^>]*\/?>/gi, '');
-  // Remove event handler attributes (onclick, onerror, etc.)
-  html = html.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  // Remove javascript: URLs in href/src
-  html = html.replace(/(href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '$1=""');
-  return html;
-}
 md.use(texmath, { engine: katex, delimiters: 'dollars' });
 
 const originalHeadingOpen =
@@ -81,7 +70,8 @@ const originalHeadingClose =
 md.renderer.rules.heading_close = function (tokens, idx, options, env, self) {
   let anchorHtml = '';
   if (env._headingSlug) {
-    anchorHtml = ` <a class="heading-anchor" data-anchor="${md.utils.escapeHtml(env._headingSlug)}" href="javascript:void(0)" aria-label="Link to this section">#</a>`;
+    const slug = md.utils.escapeHtml(env._headingSlug);
+    anchorHtml = ` <a class="heading-anchor" data-anchor="${slug}" href="#${slug}" aria-label="Link to this section">#</a>`;
     env._headingSlug = null;
   }
   return anchorHtml + originalHeadingClose(tokens, idx, options, env, self);
@@ -160,7 +150,11 @@ export function stripMarkdown(text) {
 
 export function renderMarkdown(text, options = {}) {
   const normalized = normalizeBullets(text);
-  const html = sanitizeHtml(md.render(normalized, { assetBase: options.assetBase || '' }));
+  const html = DOMPurify.sanitize(md.render(normalized, { assetBase: options.assetBase || '' }), {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['style', 'form', 'input', 'textarea', 'select', 'option', 'button'],
+    FORBID_ATTR: ['style', 'srcdoc', 'target'],
+  });
   return html.replace(/<table[\s>]/g, '<div class="table-scroll">$&').replace(/<\/table>/g, '</table></div>');
 }
 
@@ -235,49 +229,52 @@ export function addCopyButtons(container) {
   }
 }
 
-let highlighter = null;
-let loading = false;
+let highlighterPromise = null;
+const MAX_HIGHLIGHT_LENGTH = 100_000;
+
+const languageAliases = {
+  js: 'javascript',
+  jsx: 'javascript',
+  ps1: 'powershell',
+  py: 'python',
+  shell: 'bash',
+  sh: 'bash',
+  yml: 'yaml',
+};
+
+function loadHighlighter() {
+  if (!highlighterPromise) {
+    highlighterPromise = import('./highlighter.js')
+      .then((module) => module.default)
+      .catch((error) => {
+        highlighterPromise = null;
+        throw error;
+      });
+  }
+  return highlighterPromise;
+}
 
 export async function highlightCodeBlocks(container) {
   const codeBlocks = container.querySelectorAll('pre code');
   if (codeBlocks.length === 0) return;
 
   try {
-    if (!highlighter && !loading) {
-      loading = true;
-      const shikiModule = await import('https://cdn.jsdelivr.net/npm/shiki/+esm');
-      highlighter = await shikiModule.createHighlighter({
-        themes: ['github-light', 'github-dark'],
-        langs: [
-          'javascript', 'typescript', 'python', 'bash', 'shell', 'json',
-          'html', 'css', 'markdown', 'yaml', 'sql', 'java', 'c', 'cpp',
-          'go', 'rust', 'ruby', 'php',
-        ],
-      });
-      loading = false;
-    }
-
-    if (!highlighter) return;
-    const loadedLanguages = highlighter.getLoadedLanguages();
+    const highlighter = await loadHighlighter();
 
     for (const block of codeBlocks) {
+      if (block.classList.contains('hljs')) continue;
       const languageClass = Array.from(block.classList).find((c) => c.startsWith('language-'));
-      const language = languageClass ? languageClass.replace('language-', '') : 'text';
+      const requestedLanguage = languageClass ? languageClass.replace('language-', '').toLowerCase() : '';
+      const language = languageAliases[requestedLanguage] || requestedLanguage;
       const code = block.textContent;
 
       try {
-        if (!loadedLanguages.includes(language) && language !== 'text') continue;
-        const highlighted = highlighter.codeToHtml(code, {
-          lang: language,
-          themes: { light: 'github-light', dark: 'github-dark' },
-        });
-        const pre = block.parentElement;
-        if (pre && pre.tagName === 'PRE') {
-          const temp = document.createElement('div');
-          temp.insertAdjacentHTML('afterbegin', highlighted);
-          const newPre = temp.querySelector('pre');
-          if (newPre) pre.replaceWith(newPre);
-        }
+        if (!language || code.length > MAX_HIGHLIGHT_LENGTH || !highlighter.getLanguage(language)) continue;
+        block.innerHTML = highlighter.highlight(code, {
+          language,
+          ignoreIllegals: true,
+        }).value;
+        block.classList.add('hljs');
       } catch (_) {
         // Unsupported languages remain readable without highlighting
       }

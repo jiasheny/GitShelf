@@ -83,7 +83,7 @@ describe('cli config loading', () => {
       GITSHELF_REPO: 'owner/repo',
     };
 
-    expect(() => loadConfig([])).toThrow('Missing token. Set GITSHELF_TOKEN or use --token.');
+    expect(() => loadConfig([])).toThrow('Missing token. Set GITSHELF_TOKEN through your environment or secret store.');
   });
 
   it('reads repo and token from ~/.config/gitshelf/config.json when env is absent', () => {

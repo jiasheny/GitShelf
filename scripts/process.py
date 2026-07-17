@@ -119,13 +119,18 @@ def _resolve_upload_part(
 def assemble_chunked_uploads(
     input_dir: Path,
     uploads_dir: Path | None = None,
+    manifest_names: set[str] | None = None,
 ) -> dict[str, AssembledUpload]:
     """Merge browser-split PDF page groups, retaining staging files until success."""
     uploads_dir = uploads_dir or input_dir.parent / "uploads"
     repo_root = input_dir.parent.resolve()
     assembled: dict[str, AssembledUpload] = {}
 
-    for manifest_path in sorted(input_dir.glob(f"*{CHUNK_MANIFEST_SUFFIX}")):
+    manifest_paths = sorted(input_dir.glob(f"*{CHUNK_MANIFEST_SUFFIX}"))
+    if manifest_names is not None:
+        manifest_paths = [path for path in manifest_paths if path.name in manifest_names]
+
+    for manifest_path in manifest_paths:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
         if data.get("version") != 1:
             raise ValueError(f"Unsupported chunk manifest version: {manifest_path.name}")
@@ -489,6 +494,25 @@ def _resolve_input_file(input_dir: Path, filename: str) -> Path:
     raise FileNotFoundError(f"File not found in input/: {filename}")
 
 
+def _failed_input_names(output_dir: Path) -> set[str]:
+    """Return failed source/manifest names so background queue drains do not loop."""
+    failures_path = output_dir / FAILURES_FILENAME
+    try:
+        payload = json.loads(failures_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+    names: set[str] = set()
+    for record in payload.get("failures", []):
+        if not isinstance(record, dict):
+            continue
+        for key in ("filename", "retry_filename"):
+            value = record.get(key)
+            if isinstance(value, str) and value.strip():
+                names.add(Path(value).name.lower())
+    return names
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process content (PDF, EPUB, DOCX, Markdown, ZIP).")
     parser.add_argument("--input-dir", type=Path, default=Path("input"))
@@ -503,7 +527,22 @@ def main() -> None:
     manifest_path = args.output_dir / "manifest.json"
     catalog_path = args.output_dir / "catalog.json"
     metadata_path = args.output_dir / "catalog-metadata.json"
-    assembled_uploads = assemble_chunked_uploads(args.input_dir)
+    failed_names = set() if input_filename else _failed_input_names(args.output_dir)
+    requested_manifests = None
+    if input_filename and input_filename.lower().endswith(CHUNK_MANIFEST_SUFFIX):
+        requested_manifests = {Path(input_filename).name}
+    elif input_filename:
+        requested_manifests = set()
+    else:
+        requested_manifests = {
+            path.name
+            for path in args.input_dir.glob(f"*{CHUNK_MANIFEST_SUFFIX}")
+            if path.name.lower() not in failed_names
+        }
+    assembled_uploads = assemble_chunked_uploads(
+        args.input_dir,
+        manifest_names=requested_manifests,
+    )
     assembled_by_pdf = {
         upload.pdf_path: upload
         for upload in assembled_uploads.values()
@@ -584,14 +623,18 @@ def main() -> None:
             upload.pdf_path
             for upload in assembled_uploads.values()
         ]
+        regular_pdf_jobs = [
+            path for path in detect_new_pdfs(args.input_dir)
+            if path.name.lower() not in failed_names
+        ]
         pdf_jobs = list(dict.fromkeys([
             *assembled_pdf_jobs,
-            *detect_new_pdfs(args.input_dir),
+            *regular_pdf_jobs,
         ]))
-        epub_jobs = detect_new_epubs(args.input_dir)
-        docx_jobs = detect_new_docx(args.input_dir)
-        md_jobs = sorted(args.input_dir.glob("*.md"))
-        zip_jobs = sorted(args.input_dir.glob("*.zip"))
+        epub_jobs = [path for path in detect_new_epubs(args.input_dir) if path.name.lower() not in failed_names]
+        docx_jobs = [path for path in detect_new_docx(args.input_dir) if path.name.lower() not in failed_names]
+        md_jobs = [path for path in sorted(args.input_dir.glob("*.md")) if path.name.lower() not in failed_names]
+        zip_jobs = [path for path in sorted(args.input_dir.glob("*.zip")) if path.name.lower() not in failed_names]
 
     total = len(pdf_jobs) + len(epub_jobs) + len(docx_jobs) + len(md_jobs) + len(zip_jobs)
     if total == 0:
@@ -683,6 +726,7 @@ def main() -> None:
         print(f"\n{len(failures)} item(s) failed:", file=sys.stderr)
         for path, exc in failures:
             print(f"  - {path.name}: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     else:
         print("All content processed successfully.")
 

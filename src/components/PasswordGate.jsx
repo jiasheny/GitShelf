@@ -44,6 +44,7 @@ export function PasswordGate({ children }) {
     <div class="admin-auth">
       <h2>访问验证</h2>
       <p>请输入密码以访问本站内容。</p>
+      <p class="admin-auth-note">提示：这是浏览界面锁，不会隐藏公开 GitHub 仓库中的原始文件。</p>
       <form onSubmit={handleSubmit}>
         <div class="admin-input-group">
           <input

@@ -51,7 +51,7 @@ function loadConfig(argv) {
   // 3. CLI flags
   const token = getFlag(argv, '--token') || envToken || String(fileConfig.token || fileConfig.GITSHELF_TOKEN || '');
   const repo = getFlag(argv, '--repo') || envRepo || String(fileConfig.repo || fileConfig.GITSHELF_REPO || '');
-  if (!token) throw new Error('Missing token. Set GITSHELF_TOKEN or use --token.');
+  if (!token) throw new Error('Missing token. Set GITSHELF_TOKEN through your environment or secret store.');
   if (!repo) throw new Error('Missing repo. Set GITSHELF_REPO=owner/name or use --repo.');
   if (!repo.includes('/')) throw new Error('Repo must be in owner/name format.');
 

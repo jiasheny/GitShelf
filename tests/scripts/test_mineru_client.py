@@ -54,6 +54,48 @@ class MineruDocumentClientTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unsupported MinerU model"):
                 client.convert_document(document_path, model_version="unknown")
 
+    def test_retries_transient_api_failures(self) -> None:
+        unavailable = Mock(status_code=503, headers={}, url="https://mineru.example", text="busy")
+        success = Mock(status_code=200, headers={}, url="https://mineru.example", text="")
+        success.json.return_value = {
+            "code": 0,
+            "data": {"batch_id": "batch", "file_urls": ["https://upload.example"]},
+        }
+
+        with (
+            patch.object(mineru_client.requests, "post", side_effect=[unavailable, success]) as post_mock,
+            patch.object(mineru_client.time, "sleep") as sleep_mock,
+            patch.object(mineru_client.random, "uniform", return_value=0),
+        ):
+            client = mineru_client.MineruClient(token="token")
+            result = client._request_upload_url("book.pdf")
+
+        self.assertEqual(result, ("batch", "https://upload.example"))
+        self.assertEqual(post_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(1)
+
+    def test_respects_retry_after_for_rate_limits(self) -> None:
+        limited = Mock(
+            status_code=429,
+            headers={"Retry-After": "3"},
+            url="https://mineru.example",
+            text="rate limited",
+        )
+        success = Mock(status_code=200, headers={}, url="https://mineru.example", text="")
+        success.json.return_value = {
+            "code": 0,
+            "data": {"batch_id": "batch", "file_urls": ["https://upload.example"]},
+        }
+
+        with (
+            patch.object(mineru_client.requests, "post", side_effect=[limited, success]),
+            patch.object(mineru_client.time, "sleep") as sleep_mock,
+        ):
+            client = mineru_client.MineruClient(token="token")
+            client._request_upload_url("book.pdf")
+
+        sleep_mock.assert_called_once_with(3.0)
+
 
 if __name__ == "__main__":
     unittest.main()

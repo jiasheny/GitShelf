@@ -1,4 +1,5 @@
 import io
+import json
 import shutil
 import sys
 import tempfile
@@ -20,6 +21,14 @@ def _zip_with_markdown(markdown: str) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("auto.md", markdown)
+    return buf.getvalue()
+
+
+def _zip_with_markdown_and_image(markdown: str, image_name: str, image_data: bytes) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("auto.md", markdown)
+        zf.writestr(f"images/{image_name}", image_data)
     return buf.getvalue()
 
 
@@ -159,15 +168,34 @@ body 3
 
 
 class PdfChunkingTest(unittest.TestCase):
-    def test_write_cache_skips_zip_above_github_limit(self) -> None:
+    def test_write_cache_keeps_large_zip_without_complete_chunk_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             cache_dir = Path(tmp_dir)
             oversized = b"oversized"
 
             with (
                 patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "CHUNK_CACHE_DIR", cache_dir / "chunks"),
                 patch.object(convert, "MAX_GITHUB_CACHE_FILE_SIZE", len(oversized) - 1),
             ):
+                convert._write_cache("large", oversized, 300, [])
+
+            self.assertEqual((cache_dir / "large.zip").read_bytes(), oversized)
+            self.assertTrue((cache_dir / "large.meta.json").exists())
+
+    def test_write_cache_can_omit_large_zip_with_complete_chunk_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            chunks_dir = cache_dir / "chunks"
+            oversized = b"oversized"
+
+            with (
+                patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir),
+                patch.object(convert, "MAX_GITHUB_CACHE_FILE_SIZE", len(oversized) - 1),
+            ):
+                convert._write_chunk_cache("large", 0, _zip_with_markdown("# One"))
+                convert._write_chunk_cache("large", 1, _zip_with_markdown("# Two"))
                 convert._write_cache("large", oversized, 300, [])
 
             self.assertFalse((cache_dir / "large.zip").exists())
@@ -277,6 +305,106 @@ class PdfChunkingTest(unittest.TestCase):
 
         self.assertEqual(markdown, "# First\n\n# Second")
 
+    def test_merge_zips_isolates_same_named_images_by_chunk(self) -> None:
+        first = _zip_with_markdown_and_image(
+            "# First\n\n![one](images/0.jpg)", "0.jpg", b"first-image"
+        )
+        second = _zip_with_markdown_and_image(
+            "# Second\n\n![two](images/0.jpg)", "0.jpg", b"second-image"
+        )
+
+        markdown, images = extract_zip_contents(convert._merge_zips([first, second]))
+
+        self.assertIn("images/chunk-000/0.jpg", markdown)
+        self.assertIn("images/chunk-001/0.jpg", markdown)
+        self.assertEqual(images["images/chunk-000/0.jpg"], b"first-image")
+        self.assertEqual(images["images/chunk-001/0.jpg"], b"second-image")
+
+    def test_read_cache_rebuilds_large_result_from_complete_chunk_set(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            chunks_dir = cache_dir / "chunks"
+            first = _zip_with_markdown_and_image(
+                "# First\n\n![one](images/0.jpg)", "0.jpg", b"first-image"
+            )
+            second = _zip_with_markdown_and_image(
+                "# Second\n\n![two](images/0.jpg)", "0.jpg", b"second-image"
+            )
+            with (
+                patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir),
+                patch.object(convert, "MAX_GITHUB_CACHE_FILE_SIZE", 0),
+            ):
+                convert._write_chunk_cache("parent-md5", 0, first, "vlm")
+                convert._write_chunk_cache("parent-md5", 1, second, "vlm")
+                convert._write_cache(
+                    "parent-md5", b"merged-is-too-large", 400, [], model_version="vlm"
+                )
+                cached = convert._read_cache("parent-md5")
+
+            self.assertIsNotNone(cached)
+            self.assertIn("# First", cached[0])
+            self.assertIn("# Second", cached[0])
+            self.assertEqual(cached[1]["images/chunk-000/0.jpg"], b"first-image")
+            self.assertEqual(cached[1]["images/chunk-001/0.jpg"], b"second-image")
+
+    def test_corrupt_cache_files_are_removed_and_treated_as_misses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            chunks_dir = cache_dir / "chunks"
+            chunks_dir.mkdir()
+
+            (cache_dir / "broken.meta.json").write_text("{", encoding="utf-8")
+            with (
+                patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir),
+            ):
+                self.assertIsNone(convert._read_cache("broken"))
+            self.assertFalse((cache_dir / "broken.meta.json").exists())
+
+            chunk_path = chunks_dir / f"parent_p{convert.MAX_PAGES_PER_CHUNK}_chunk_000.zip"
+            chunk_path.write_bytes(b"not-a-zip")
+            with patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir):
+                self.assertIsNone(convert._read_chunk_cache("parent", 0))
+            self.assertFalse(chunk_path.exists())
+
+    def test_valid_zip_without_markdown_is_removed_as_corrupt_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            chunks_dir = cache_dir / "chunks"
+            chunks_dir.mkdir()
+            invalid_zip = io.BytesIO()
+            with zipfile.ZipFile(invalid_zip, "w") as archive:
+                archive.writestr("readme.txt", "missing markdown")
+
+            (cache_dir / "empty.meta.json").write_text(
+                json.dumps({"cache_schema": convert.CACHE_SCHEMA_VERSION, "page_count": 1, "toc": []}),
+                encoding="utf-8",
+            )
+            (cache_dir / "empty.zip").write_bytes(invalid_zip.getvalue())
+            with (
+                patch.object(convert, "CACHE_DIR", cache_dir),
+                patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir),
+            ):
+                self.assertIsNone(convert._read_cache("empty"))
+            self.assertFalse((cache_dir / "empty.zip").exists())
+
+            chunk_path = chunks_dir / f"parent_p{convert.MAX_PAGES_PER_CHUNK}_chunk_000.zip"
+            chunk_path.write_bytes(invalid_zip.getvalue())
+            with patch.object(convert, "CHUNK_CACHE_DIR", chunks_dir):
+                self.assertIsNone(convert._read_chunk_cache("parent", 0))
+            self.assertFalse(chunk_path.exists())
+
+    def test_cache_schema_mismatch_is_a_miss(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_dir = Path(tmp_dir)
+            cache_dir.joinpath("future.meta.json").write_text(
+                json.dumps({"cache_schema": 999, "page_count": 1, "toc": []}),
+                encoding="utf-8",
+            )
+            with patch.object(convert, "CACHE_DIR", cache_dir):
+                self.assertIsNone(convert._read_cache("future"))
+
     def test_convert_large_pdf_reuses_cached_chunks_across_retries(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -310,8 +438,8 @@ class PdfChunkingTest(unittest.TestCase):
             client.convert_pdf.assert_called_once_with(chunk_2, model_version="vlm")
             write_cache_mock.assert_called_once_with("parent-md5", 1, fresh_zip, "vlm")
             self.assertEqual(markdown, "# Cached chunk\n\n# Fresh chunk")
-            self.assertEqual(images["images/cached.png"], b"cached")
-            self.assertEqual(images["images/fresh.png"], b"fresh")
+            self.assertEqual(images["images/chunk-000/cached.png"], b"cached")
+            self.assertEqual(images["images/chunk-001/fresh.png"], b"fresh")
             with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
                 self.assertEqual(len([n for n in zf.namelist() if n.endswith(".md")]), 2)
 

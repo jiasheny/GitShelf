@@ -30,22 +30,26 @@ Your site is now live at `https://<your-username>.github.io/gitshelf/`
 
 1. In your fork, go to **Settings > Secrets and variables > Actions**
 2. Click **New repository secret**, name it `VITE_SITE_PASSWORD`, set your password
-3. Re-deploy — visitors must now enter the password to access the site
+3. Re-deploy — visitors must now enter the password to open the bookshelf UI
+
+> This is a browser UI gate, not private access control. Files in a public GitHub repository remain directly accessible. Use private storage with server-side authentication for sensitive material.
 
 > Leave unset to keep the site public.
 
 ### 4. Upload Content
 
 1. Visit your site and click the gear icon in the top bar
-2. Enter a GitHub **Personal Access Token** with `repo` scope
-   ([Create one here](https://github.com/settings/tokens/new?scopes=repo&description=GitShelf))
+2. Enter a GitHub **fine-grained Personal Access Token** limited to this repository, with
+   **Contents** and **Actions** read/write permissions
+   ([Create one here](https://github.com/settings/personal-access-tokens/new)). The browser keeps it
+   only in the current page's memory, so a reload requires signing in again.
 3. Upload a file:
    - **`.pdf`** — Converted to a multi-chapter book via MinerU API
    - **`.epub`** — Converted to PDF with Calibre, then processed through the same chapter pipeline as PDFs
    - **`.docx`** — Parsed natively as a Word document without OCR
    - **`.md`** — Rendered directly as a document
    - **`.zip`** — Extracted as a static site (must contain `index.html`)
-4. Wait for GitHub Actions to process (progress shown in Actions tab)
+4. Follow conversion and publishing progress in the upload panel (the Actions log remains linked for details)
 5. Your content appears on the homepage!
 
 ## Content Types
@@ -117,13 +121,15 @@ Add to your MCP client config (Claude Code, Cursor, etc.):
       "command": "npx",
       "args": ["-y", "@praeviso/gitshelf", "mcp"],
       "env": {
-        "GITSHELF_TOKEN": "ghp_xxx",
         "GITSHELF_REPO": "owner/repo"
       }
     }
   }
 }
 ```
+
+Provide `GITSHELF_TOKEN` through your MCP client's secret store or the parent process environment.
+Use a fine-grained, least-privilege token; do not paste it into a plaintext MCP configuration file.
 
 Provides tools to list content, read book chapters and articles, edit metadata, upload files, and delete items.
 

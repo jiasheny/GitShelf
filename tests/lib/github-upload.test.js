@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ACCEPTED_EXTENSIONS, uploadContent } from '../../src/lib/github-api';
+import { ACCEPTED_EXTENSIONS, clearPat, setPat, uploadContent } from '../../src/lib/github-api';
 
 class FakeXMLHttpRequest {
   static latest;
@@ -32,7 +32,8 @@ class FakeXMLHttpRequest {
 
 beforeEach(() => {
   FakeXMLHttpRequest.instances = [];
-  localStorage.setItem('github_pat', 'token');
+  clearPat();
+  setPat('token');
   global.XMLHttpRequest = FakeXMLHttpRequest;
   global.fetch = vi.fn(async () => ({
     ok: false,

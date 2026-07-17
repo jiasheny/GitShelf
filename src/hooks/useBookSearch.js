@@ -6,9 +6,19 @@ const DEBOUNCE_MS = 200;
 const MAX_RESULTS = 50;
 const SNIPPET_RADIUS = 80;
 const MIN_QUERY_LENGTH = 2;
+const MAX_CONCURRENT_CHAPTER_LOADS = 6;
+const MAX_CACHED_BOOKS = 3;
 
 // Module-level cache: bookId → Map<slug, { title, plainText }>
 const cache = new Map();
+
+function cacheBook(bookId, chapters) {
+  cache.delete(bookId);
+  cache.set(bookId, chapters);
+  while (cache.size > MAX_CACHED_BOOKS) {
+    cache.delete(cache.keys().next().value);
+  }
+}
 
 function extractSnippet(text, matchIndex, queryLength) {
   let start = matchIndex - SNIPPET_RADIUS;
@@ -85,6 +95,7 @@ export function useBookSearch(bookId, tocData) {
   const [results, setResults] = useState([]);
   const [totalMatches, setTotalMatches] = useState(0);
   const debounceRef = useRef(null);
+  const queryRef = useRef('');
 
   const chaptersMap = bookId ? cache.get(bookId) : null;
 
@@ -100,9 +111,12 @@ export function useBookSearch(bookId, tocData) {
 
     const map = new Map();
     let loaded = 0;
+    let nextIndex = 0;
 
-    await Promise.all(
-      chapters.map(async (ch) => {
+    const loadWorker = async () => {
+      while (nextIndex < chapters.length) {
+        const ch = chapters[nextIndex];
+        nextIndex += 1;
         try {
           const raw = await fetchText(`books/${bookId}/chapters/${ch.slug}.md`);
           map.set(ch.slug, { title: ch.title, plainText: stripMarkdown(raw) });
@@ -111,16 +125,29 @@ export function useBookSearch(bookId, tocData) {
         }
         loaded++;
         setLoadProgress({ loaded, total: chapters.length });
-      }),
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(MAX_CONCURRENT_CHAPTER_LOADS, chapters.length) },
+        () => loadWorker(),
+      ),
     );
 
-    cache.set(bookId, map);
+    cacheBook(bookId, map);
     setLoading(false);
+    const pendingQuery = queryRef.current;
+    if (pendingQuery.length >= MIN_QUERY_LENGTH) {
+      const found = searchChapters(map, pendingQuery);
+      setResults(found);
+      setTotalMatches(countAllMatches(map, pendingQuery));
+    }
   }, [bookId, tocData]);
 
   const setQuery = useCallback(
     (value) => {
       setQueryRaw(value);
+      queryRef.current = value;
       if (debounceRef.current) clearTimeout(debounceRef.current);
 
       if (value.length < MIN_QUERY_LENGTH) {
@@ -135,7 +162,7 @@ export function useBookSearch(bookId, tocData) {
         const found = searchChapters(map, value);
         setResults(found);
         setTotalMatches(
-          found.length < MAX_RESULTS ? countAllMatches(map, value) : countAllMatches(map, value),
+          countAllMatches(map, value),
         );
       }, DEBOUNCE_MS);
     },
@@ -150,6 +177,7 @@ export function useBookSearch(bookId, tocData) {
   // Reset query when book changes
   useEffect(() => {
     setQueryRaw('');
+    queryRef.current = '';
     setResults([]);
     setTotalMatches(0);
   }, [bookId]);

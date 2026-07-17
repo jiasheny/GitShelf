@@ -52,9 +52,9 @@
   --syntax-comment: #6F6F78;
 
   /* --- Font Stacks --- */
-  --font-reading: "Newsreader", "Source Serif 4", "Noto Serif SC", Georgia, "Times New Roman", serif;
-  --font-ui: "DM Sans", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-code: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace;
+  --font-reading: "Noto Serif SC", "Songti SC", SimSun, Georgia, "Times New Roman", serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-code: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
   /* --- Spacing (8px grid) --- */
   --space-1: 4px;
@@ -953,6 +953,18 @@ button {
   color: var(--color-text-tertiary);
 }
 
+.book-overview-toc--nested {
+  padding-left: var(--space-5);
+}
+
+.book-overview-toc--nested .book-overview-toc-item:first-child {
+  border-top: 0;
+}
+
+.book-overview-toc-group {
+  font-weight: 600;
+}
+
 @media (max-width: 519px) {
   .book-overview-title {
     font-size: 28px;
@@ -1135,18 +1147,45 @@ button {
   border: 1px solid var(--color-border);
 }
 
-/* Shiki dual-theme: activate dark theme CSS variables in dark mode */
-[data-theme="dark"] .shiki,
-[data-theme="dark"] .shiki span {
-  color: var(--shiki-dark) !important;
-  font-style: var(--shiki-dark-font-style) !important;
-  font-weight: var(--shiki-dark-font-weight) !important;
-  text-decoration: var(--shiki-dark-text-decoration) !important;
+/* Locally bundled syntax highlighting; keep it aligned with the reader theme. */
+.markdown-body pre code.hljs {
+  background: transparent;
+  padding: 0;
 }
 
-[data-theme="dark"] .shiki {
-  background-color: var(--color-bg-code) !important;
-}
+[data-theme="dark"] .hljs { color: #c9d1d9; }
+[data-theme="dark"] .hljs-doctag,
+[data-theme="dark"] .hljs-keyword,
+[data-theme="dark"] .hljs-meta .hljs-keyword,
+[data-theme="dark"] .hljs-template-tag,
+[data-theme="dark"] .hljs-template-variable,
+[data-theme="dark"] .hljs-type,
+[data-theme="dark"] .hljs-variable.language_ { color: #ff7b72; }
+[data-theme="dark"] .hljs-title,
+[data-theme="dark"] .hljs-title.class_,
+[data-theme="dark"] .hljs-title.function_ { color: #d2a8ff; }
+[data-theme="dark"] .hljs-attr,
+[data-theme="dark"] .hljs-attribute,
+[data-theme="dark"] .hljs-literal,
+[data-theme="dark"] .hljs-meta,
+[data-theme="dark"] .hljs-number,
+[data-theme="dark"] .hljs-operator,
+[data-theme="dark"] .hljs-variable,
+[data-theme="dark"] .hljs-selector-attr,
+[data-theme="dark"] .hljs-selector-class,
+[data-theme="dark"] .hljs-selector-id { color: #79c0ff; }
+[data-theme="dark"] .hljs-regexp,
+[data-theme="dark"] .hljs-string,
+[data-theme="dark"] .hljs-meta .hljs-string { color: #a5d6ff; }
+[data-theme="dark"] .hljs-built_in,
+[data-theme="dark"] .hljs-symbol { color: #ffa657; }
+[data-theme="dark"] .hljs-comment,
+[data-theme="dark"] .hljs-code,
+[data-theme="dark"] .hljs-formula { color: #8b949e; }
+[data-theme="dark"] .hljs-name,
+[data-theme="dark"] .hljs-quote,
+[data-theme="dark"] .hljs-selector-tag,
+[data-theme="dark"] .hljs-selector-pseudo { color: #7ee787; }
 
 /* Code block copy button */
 .code-block-wrapper {
@@ -2413,6 +2452,11 @@ button {
 .upload-progress--success {
   background-color: var(--color-accent-subtle);
   color: var(--color-accent);
+}
+
+.upload-progress--warning {
+  background-color: rgba(180, 120, 20, 0.12);
+  color: var(--color-text-secondary);
 }
 
 .upload-progress--error {
