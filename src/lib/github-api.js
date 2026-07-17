@@ -13,6 +13,9 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MAX_LARGE_PDF_SIZE = 500 * 1024 * 1024;
 const LARGE_PDF_CHUNK_SIZE = 15 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['pdf', 'epub', 'docx', 'md', 'zip'];
+const CONVERSION_DISCOVERY_TIMEOUT_MS = 10 * 60 * 1000;
+const CONVERSION_RUN_TIMEOUT_MS = 190 * 60 * 1000;
+const DEPLOY_DISCOVERY_TIMEOUT_MS = 20 * 60 * 1000;
 
 const CONTENT_TYPE_DIRS = {
   book: 'docs/books',
@@ -21,9 +24,27 @@ const CONTENT_TYPE_DIRS = {
 };
 
 // --- PAT ---
-export function getPat() { return localStorage.getItem(PAT_STORAGE_KEY); }
-export function setPat(pat) { localStorage.setItem(PAT_STORAGE_KEY, pat); }
-export function clearPat() { localStorage.removeItem(PAT_STORAGE_KEY); }
+let inMemoryPat = '';
+
+export function getPat() {
+  if (inMemoryPat) return inMemoryPat;
+
+  // Defense in depth for direct AdminView loads; the application bootstrap also
+  // clears credentials left by older releases before any route is rendered.
+  sessionStorage.removeItem(PAT_STORAGE_KEY);
+  localStorage.removeItem(PAT_STORAGE_KEY);
+  return inMemoryPat;
+}
+export function setPat(pat) {
+  inMemoryPat = String(pat || '');
+  sessionStorage.removeItem(PAT_STORAGE_KEY);
+  localStorage.removeItem(PAT_STORAGE_KEY);
+}
+export function clearPat() {
+  inMemoryPat = '';
+  sessionStorage.removeItem(PAT_STORAGE_KEY);
+  localStorage.removeItem(PAT_STORAGE_KEY);
+}
 
 // --- Repo ---
 export function detectRepo() {
@@ -48,7 +69,7 @@ export async function githubApi(path, options = {}) {
   if (!pat) throw new Error('No GitHub PAT configured');
   const url = path.startsWith('http') ? path : `${GITHUB_API_BASE}${path}`;
   const parsed = new URL(url);
-  if (parsed.hostname !== 'api.github.com') throw new Error('PAT must only be sent to api.github.com');
+  if (parsed.origin !== GITHUB_API_BASE) throw new Error('PAT must only be sent to https://api.github.com');
   const res = await fetch(url, {
     ...options,
     headers: { Authorization: `Bearer ${pat}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json', ...options.headers },
@@ -56,8 +77,11 @@ export async function githubApi(path, options = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     const body = await res.text();
-    if (res.status === 401) throw new Error('Authentication failed. Please check your PAT.');
-    throw new Error(`GitHub API error ${res.status} on ${path}: ${body}`);
+    const error = new Error(res.status === 401
+      ? 'Authentication failed. Please check your PAT.'
+      : `GitHub API error ${res.status} on ${path}: ${body}`);
+    error.status = res.status;
+    throw error;
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -93,8 +117,13 @@ function githubUpload(path, body, onUploadProgress, method = 'PUT') {
   });
 }
 
-export async function verifyPat() {
-  return githubApi('/user');
+export async function verifyPat(repo) {
+  const user = await githubApi('/user');
+  if (repo?.owner && repo?.name) {
+    await githubApi(`/repos/${repo.owner}/${repo.name}`);
+    await githubApi(`/repos/${repo.owner}/${repo.name}/actions/workflows/convert.yml/runs?per_page=1`);
+  }
+  return user;
 }
 
 // --- Encoding ---
@@ -233,7 +262,7 @@ async function readRepositoryJson(repo, path) {
 
 async function commitRepositoryOperations(repo, message, operations) {
   const ops = [...new Map((operations || []).filter(o => o?.path).map(o => [o.path, o])).values()].sort((a, b) => compareString(a.path, b.path));
-  if (ops.length === 0) return;
+  if (ops.length === 0) return null;
   const ref = await githubApi(`/repos/${repo.owner}/${repo.name}/git/ref/heads/${REPO_WRITE_BRANCH}`);
   const parentSha = ref?.object?.sha;
   if (!parentSha) throw new Error(`Could not resolve branch head for ${REPO_WRITE_BRANCH}.`);
@@ -246,6 +275,7 @@ async function commitRepositoryOperations(repo, message, operations) {
   const newCommit = await githubApi(`/repos/${repo.owner}/${repo.name}/git/commits`, { method: 'POST', body: JSON.stringify({ message, tree: newTree.sha, parents: [parentSha] }) });
   if (!newCommit?.sha) throw new Error('Failed to create repository commit.');
   await githubApi(`/repos/${repo.owner}/${repo.name}/git/refs/heads/${REPO_WRITE_BRANCH}`, { method: 'PATCH', body: JSON.stringify({ sha: newCommit.sha, force: false }) });
+  return newCommit.sha;
 }
 
 function notifyCatalogUpdated() { window.dispatchEvent(new CustomEvent('gitshelf:catalog-updated')); }
@@ -357,6 +387,7 @@ async function commitLargePdfUpload(repo, file, uploadId, parts) {
     method: 'PATCH',
     body: JSON.stringify({ sha: commit.sha, force: false }),
   });
+  return { commitSha: commit.sha, retryFilename: `${uploadId}.parts.json` };
 }
 
 async function uploadLargePdf(file, repo, onProgress) {
@@ -403,7 +434,7 @@ async function uploadLargePdf(file, repo, onProgress) {
   }
 
   onProgress('preparing', 'Starting automatic conversion...', { percent: 96 });
-  await commitLargePdfUpload(repo, file, uploadId, uploaded);
+  return commitLargePdfUpload(repo, file, uploadId, uploaded);
 }
 
 export async function uploadContent(file, repo, onProgress) {
@@ -412,9 +443,9 @@ export async function uploadContent(file, repo, onProgress) {
   if (!ACCEPTED_EXTENSIONS.includes(ext)) throw new Error(`Unsupported file type. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
   if (ext === 'pdf' && file.size > MAX_FILE_SIZE) {
     if (file.size > MAX_LARGE_PDF_SIZE) throw new Error('PDF too large (max 500 MB).');
-    await uploadLargePdf(file, repo, onProgress);
+    const result = await uploadLargePdf(file, repo, onProgress);
     onProgress('done', 'Upload complete.', { percent: 100 });
-    return;
+    return { ...result, filename: file.name, queuedAt: new Date().toISOString() };
   }
   if (file.size > MAX_FILE_SIZE) throw new Error(`File too large (max 100 MB).`);
   onProgress('reading', `Reading ${file.name}...`, { percent: 0 });
@@ -433,7 +464,7 @@ export async function uploadContent(file, repo, onProgress) {
   const body = { message: `feat(pipeline): upload ${file.name}`, content: base64 };
   if (sha) body.sha = sha;
   onProgress('uploading', 'Uploading to GitHub... 0%', { percent: 25, uploadPercent: 0 });
-  await githubUpload(`/repos/${repo.owner}/${repo.name}/contents/${filePath}`, body, (loaded, total) => {
+  const response = await githubUpload(`/repos/${repo.owner}/${repo.name}/contents/${filePath}`, body, (loaded, total) => {
     const uploadPercent = Math.round((loaded / total) * 100);
     onProgress('uploading', `Uploading to GitHub... ${uploadPercent}%`, {
       percent: 25 + Math.round(uploadPercent * 0.7),
@@ -441,6 +472,160 @@ export async function uploadContent(file, repo, onProgress) {
     });
   });
   onProgress('done', 'Upload complete.', { percent: 100 });
+  return {
+    commitSha: response?.commit?.sha || null,
+    filename: file.name,
+    queuedAt: new Date().toISOString(),
+  };
+}
+
+function workflowStepStatus(run, jobs) {
+  const steps = (jobs || []).flatMap((job) => Array.isArray(job.steps) ? job.steps : []);
+  const active = steps.find((step) => step.status === 'in_progress');
+  const latest = active || [...steps].reverse().find((step) => step.conclusion === 'success');
+  const name = String(latest?.name || '').toLowerCase();
+
+  if (name.includes('commit and push')) return { percent: 84, message: 'Saving the converted book...' };
+  if (name.includes('process content')) return { percent: 58, message: 'Detecting the document type and converting it...' };
+  if (name.includes('calibre')) return { percent: 35, message: 'Preparing document conversion tools...' };
+  if (name.includes('install')) return { percent: 27, message: 'Preparing the conversion environment...' };
+  if (name.includes('python') || name.includes('checkout')) return { percent: 18, message: 'Starting the conversion worker...' };
+  return {
+    percent: run.status === 'queued' ? 12 : 22,
+    message: run.status === 'queued' ? 'Conversion is queued...' : 'Conversion is running...',
+  };
+}
+
+function elapsedSince(value) {
+  const timestamp = new Date(value || 0).getTime();
+  return timestamp ? Math.max(0, Date.now() - timestamp) : 0;
+}
+
+async function findResultCommit(repo, job) {
+  if (!job.commitSha) return null;
+  const queuedAt = new Date(job.queuedAt || 0).getTime();
+  const since = new Date(Math.max(0, queuedAt - 60_000)).toISOString();
+  const commits = await githubApi(
+    `/repos/${repo.owner}/${repo.name}/commits?sha=${REPO_WRITE_BRANCH}&since=${encodeURIComponent(since)}&per_page=100`,
+  );
+  if (!Array.isArray(commits)) return null;
+  const marker = `GitShelf-Source: ${job.commitSha}`;
+  return commits.find((commit) => String(commit?.commit?.message || '').includes(marker)) || null;
+}
+
+async function deploymentStatus(repo, job, resultCommit, runUrl) {
+  const resultSha = resultCommit.sha;
+  const deployRuns = await githubApi(
+    `/repos/${repo.owner}/${repo.name}/actions/workflows/deploy-pages.yml/runs?branch=${REPO_WRITE_BRANCH}&event=push&head_sha=${resultSha}&per_page=10`,
+  );
+  const deploy = (deployRuns?.workflow_runs || []).find((candidate) => candidate.head_sha === resultSha);
+  const resultTime = resultCommit?.commit?.committer?.date || resultCommit?.commit?.author?.date || job.queuedAt;
+
+  if (!deploy) {
+    if (elapsedSince(resultTime) > DEPLOY_DISCOVERY_TIMEOUT_MS) {
+      return {
+        stage: 'unknown', percent: 95, runUrl,
+        message: 'Conversion finished, but publishing did not start. You can upload another file or open Actions to check it.',
+      };
+    }
+    return {
+      stage: 'deploying', percent: 92, runUrl,
+      message: 'Conversion finished. Waiting for the updated bookshelf to publish...',
+    };
+  }
+  if (deploy.status !== 'completed') {
+    return {
+      stage: 'deploying', percent: 95, runUrl, deployUrl: deploy.html_url || null,
+      message: 'Publishing the updated bookshelf...',
+    };
+  }
+  if (deploy.conclusion !== 'success') {
+    return {
+      stage: 'failed', percent: 100, runUrl, deployUrl: deploy.html_url || null,
+      message: 'Conversion succeeded, but publishing failed. Open the deployment log for details.',
+    };
+  }
+  return {
+    stage: 'complete', percent: 100, runUrl, deployUrl: deploy.html_url || null,
+    message: 'Conversion and publishing are complete. The book is now on your shelf.',
+  };
+}
+
+/** Return a user-facing status for an upload's conversion and Pages deployment. */
+export async function fetchConversionStatus(repo, job) {
+  if (!repo.owner || !repo.name || !job?.queuedAt) throw new Error('Missing conversion tracking details.');
+  if (!job.commitSha) {
+    return {
+      stage: 'unknown', percent: 8,
+      message: 'GitHub did not return an upload commit ID, so this conversion cannot be tracked reliably. Open Actions to check it.',
+    };
+  }
+
+  const workflowRuns = await githubApi(
+    `/repos/${repo.owner}/${repo.name}/actions/workflows/convert.yml/runs?branch=${REPO_WRITE_BRANCH}&event=push&head_sha=${job.commitSha}&per_page=10`,
+  );
+  const run = (workflowRuns?.workflow_runs || []).find((candidate) => candidate.head_sha === job.commitSha);
+
+  if (!run) {
+    const resultCommit = await findResultCommit(repo, job);
+    if (resultCommit) return deploymentStatus(repo, job, resultCommit, null);
+    if (elapsedSince(job.queuedAt) > CONVERSION_DISCOVERY_TIMEOUT_MS) {
+      return {
+        stage: 'unknown', percent: 8,
+        message: 'No conversion run appeared in time. You can upload another file or open Actions to check the queue.',
+      };
+    }
+    return { stage: 'queued', percent: 8, message: 'Upload complete. Waiting for conversion to start...' };
+  }
+
+  const runUrl = run.html_url || null;
+  if (run.status !== 'completed') {
+    if (elapsedSince(run.created_at || job.queuedAt) > CONVERSION_RUN_TIMEOUT_MS) {
+      return {
+        stage: 'unknown', percent: 58, runUrl,
+        message: 'Conversion is taking longer than expected. You can upload another file while checking the Action log.',
+      };
+    }
+    let jobs = [];
+    try {
+      const payload = await githubApi(`/repos/${repo.owner}/${repo.name}/actions/runs/${run.id}/jobs?per_page=20`);
+      jobs = payload?.jobs || [];
+    } catch { /* Run status remains useful if job details are temporarily unavailable. */ }
+    return { stage: 'processing', runUrl, ...workflowStepStatus(run, jobs) };
+  }
+
+  const failures = await fetchFailures(repo);
+  const filename = String(job.filename || '').toLowerCase();
+  const retryFilename = String(job.retryFilename || '').toLowerCase();
+  const failed = failures.find((record) => (
+    (filename && String(record.filename || '').toLowerCase() === filename)
+    || (retryFilename && String(record.retry_filename || '').toLowerCase() === retryFilename)
+  ));
+  if (failed) {
+    return {
+      stage: 'failed', percent: 100, runUrl,
+      message: failed.error || 'Conversion failed. Use Retry in the failures section.',
+    };
+  }
+  if (run.conclusion !== 'success' && run.conclusion !== 'cancelled') {
+    return {
+      stage: 'failed', percent: 100, runUrl,
+      message: `Conversion ${run.conclusion || 'failed'}. Open the log for details.`,
+    };
+  }
+
+  const resultCommit = await findResultCommit(repo, job);
+  if (resultCommit) return deploymentStatus(repo, job, resultCommit, runUrl);
+  if (run.conclusion === 'cancelled' && elapsedSince(job.queuedAt) <= CONVERSION_DISCOVERY_TIMEOUT_MS) {
+    return {
+      stage: 'queued', percent: 12, runUrl,
+      message: 'This run was superseded by a newer upload. Waiting for the shared conversion queue...',
+    };
+  }
+  return {
+    stage: 'unknown', percent: 88, runUrl,
+    message: 'The conversion run ended without a matching bookshelf update. You can upload another file or inspect the Action log.',
+  };
 }
 
 export async function triggerReconvert(item, repo, { clearCache = false } = {}) {
@@ -448,10 +633,7 @@ export async function triggerReconvert(item, repo, { clearCache = false } = {}) 
   const filename = String(item.source || '').trim();
   if (!filename) throw new Error('Missing source file metadata.');
   if (clearCache) {
-    const cacheOps = await getCacheDeleteOps(repo, item.id);
-    if (cacheOps.length) {
-      await commitRepositoryOperations(repo, `chore(admin): clear cache for ${item.id}`, cacheOps);
-    }
+    throw new Error('A fresh conversion requires re-uploading the original file.');
   }
   await githubApi(`/repos/${repo.owner}/${repo.name}/actions/workflows/convert.yml/dispatches`, {
     method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { filename } }),

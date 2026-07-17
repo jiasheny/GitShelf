@@ -18,14 +18,15 @@ Operate a GitShelf repository from the command line.
 
 ## Config
 
-- Store the default repo and token in `~/.config/gitshelf/config.json`.
+- Store only the default repo in `~/.config/gitshelf/config.json`.
 - Store a local override in `.gitshelfrc` inside the current working directory when needed.
-- Use these keys:
+- Supply the fine-grained token through `GITSHELF_TOKEN` or a system secret store. Do not
+  put it in command arguments, shell history, or plaintext JSON files.
+- Use this repo configuration:
 
 ```json
 {
-  "repo": "owner/repo",
-  "token": "github_pat_xxx"
+  "repo": "owner/repo"
 }
 ```
 

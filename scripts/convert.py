@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - handled at runtime for local tests
     fitz = None
 
 try:
-    from .mineru_client import MineruClient, extract_zip_contents
+    from .mineru_client import MineruClient, MineruError, extract_zip_contents
     from .split_markdown import (
         Chapter,
         find_protected_ranges,
@@ -37,7 +37,7 @@ try:
     from .generate_structure import generate_book_structure
     from .build_manifest import build_manifest
 except ImportError:
-    from mineru_client import MineruClient, extract_zip_contents
+    from mineru_client import MineruClient, MineruError, extract_zip_contents
     from split_markdown import (
         Chapter,
         find_protected_ranges,
@@ -68,7 +68,8 @@ MIN_NATIVE_TEXT_CHARS = 80
 NATIVE_TEXT_RATIO = 0.85
 SCANNED_TEXT_RATIO = 0.2
 BOOK_METADATA_FILENAME = "meta.json"
-CACHE_DIR = Path("cache/markdown")
+CACHE_SCHEMA_VERSION = 2
+CACHE_DIR = Path(os.environ.get("GITSHELF_CACHE_DIR", "cache/markdown"))
 CHUNK_CACHE_DIR = CACHE_DIR / "chunks"
 MAX_GITHUB_CACHE_FILE_SIZE = 95 * 1024 * 1024
 FAILURES_FILENAME = "failures.json"
@@ -683,17 +684,28 @@ def _write_cache(
     """Write raw MinerU ZIP and metadata to cache."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = CACHE_DIR / f"{md5}.zip"
-    if len(zip_data) <= MAX_GITHUB_CACHE_FILE_SIZE:
-        zip_path.write_bytes(zip_data)
-    else:
+    chunk_count = (
+        (page_count + MAX_PAGES_PER_CHUNK - 1) // MAX_PAGES_PER_CHUNK
+        if page_count > PAGE_THRESHOLD
+        else 0
+    )
+    complete_chunk_cache = bool(chunk_count) and all(
+        (CHUNK_CACHE_DIR / f"{_chunk_cache_key(md5, index, model_version or OCR_PDF_MODEL)}.zip").is_file()
+        for index in range(chunk_count)
+    )
+    if len(zip_data) > MAX_GITHUB_CACHE_FILE_SIZE and complete_chunk_cache:
         zip_path.unlink(missing_ok=True)
         print(
             f"  Skipping merged cache ZIP ({len(zip_data) / 1024 / 1024:.2f} MB); "
             "chunk caches remain available for retry."
         )
+    else:
+        _atomic_write_bytes(zip_path, zip_data)
     meta = {
+        "cache_schema": CACHE_SCHEMA_VERSION,
         "page_count": page_count,
         "toc": [{"level": e.level, "title": e.title} for e in toc],
+        "chunk_count": chunk_count,
     }
     if conversion_method:
         meta["conversion_method"] = conversion_method
@@ -701,9 +713,26 @@ def _write_cache(
         meta["model_version"] = model_version
     if ocr_used is not None:
         meta["ocr_used"] = ocr_used
-    (CACHE_DIR / f"{md5}.meta.json").write_text(
-        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    _atomic_write_bytes(
+        CACHE_DIR / f"{md5}.meta.json",
+        (json.dumps(meta, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
     )
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Replace one cache file atomically so interrupted runners cannot leave partial data."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_name = ""
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as handle:
+            temp_name = handle.name
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    finally:
+        if temp_name:
+            Path(temp_name).unlink(missing_ok=True)
 
 
 def _read_cache(md5: str) -> tuple[str, dict[str, bytes], int, list[TocEntry]] | None:
@@ -716,20 +745,54 @@ def _read_cache(md5: str) -> tuple[str, dict[str, bytes], int, list[TocEntry]] |
     if not meta_file.exists():
         return None
 
-    meta = json.loads(meta_file.read_text(encoding="utf-8"))
-    toc = [TocEntry(level=e["level"], title=e["title"]) for e in meta.get("toc", [])]
+    try:
+        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        schema = meta.get("cache_schema")
+        if schema is not None and int(schema) != CACHE_SCHEMA_VERSION:
+            print(f"  Ignoring cache {md5}: unsupported schema {schema}")
+            return None
+        page_count = int(meta["page_count"])
+        toc = [TocEntry(level=int(e["level"]), title=str(e["title"])) for e in meta.get("toc", [])]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        print(f"  Ignoring corrupt cache metadata for {md5}: {exc}")
+        meta_file.unlink(missing_ok=True)
+        return None
 
     zip_file = CACHE_DIR / f"{md5}.zip"
     if zip_file.exists():
-        zip_data = zip_file.read_bytes()
-        markdown, images = extract_zip_contents(zip_data)
-        return markdown, images, meta["page_count"], toc
+        try:
+            zip_data = zip_file.read_bytes()
+            markdown, images = extract_zip_contents(zip_data)
+            return markdown, images, page_count, toc
+        except (OSError, ValueError, zipfile.BadZipFile, MineruError) as exc:
+            print(f"  Ignoring corrupt merged cache for {md5}: {exc}")
+            zip_file.unlink(missing_ok=True)
+
+    # Large conversions may intentionally omit the merged ZIP. Rebuild it from
+    # the durable per-chunk snapshots when every expected chunk is available.
+    chunk_count = int(meta.get("chunk_count") or 0)
+    if not chunk_count and page_count > PAGE_THRESHOLD:
+        chunk_count = (
+            page_count + MAX_PAGES_PER_CHUNK - 1
+        ) // MAX_PAGES_PER_CHUNK
+    if chunk_count:
+        model_version = str(meta.get("model_version") or OCR_PDF_MODEL)
+        chunk_zips: list[bytes] = []
+        for index in range(chunk_count):
+            cached_chunk = _read_chunk_cache(md5, index, model_version)
+            if cached_chunk is None:
+                break
+            chunk_zips.append(cached_chunk[0])
+        if len(chunk_zips) == chunk_count:
+            merged_zip = _merge_zips(chunk_zips)
+            markdown, images = extract_zip_contents(merged_zip)
+            return markdown, images, page_count, toc
 
     # Legacy cache: .md only, no images
     md_file = CACHE_DIR / f"{md5}.md"
     if md_file.exists():
         markdown = md_file.read_text(encoding="utf-8")
-        return markdown, {}, meta["page_count"], toc
+        return markdown, {}, page_count, toc
 
     return None
 
@@ -762,7 +825,7 @@ def _write_chunk_cache(
     """Persist one successful chunk conversion for cross-workflow retry."""
     CHUNK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     key = _chunk_cache_key(parent_md5, chunk_index, model_version)
-    (CHUNK_CACHE_DIR / f"{key}.zip").write_bytes(zip_data)
+    _atomic_write_bytes(CHUNK_CACHE_DIR / f"{key}.zip", zip_data)
 
 
 def _read_chunk_cache(
@@ -776,9 +839,14 @@ def _read_chunk_cache(
     if not zip_file.exists():
         return None
 
-    zip_data = zip_file.read_bytes()
-    markdown, images = extract_zip_contents(zip_data)
-    return zip_data, markdown, images
+    try:
+        zip_data = zip_file.read_bytes()
+        markdown, images = extract_zip_contents(zip_data)
+        return zip_data, markdown, images
+    except (OSError, ValueError, zipfile.BadZipFile, MineruError) as exc:
+        print(f"  Ignoring corrupt chunk cache {zip_file.name}: {exc}")
+        zip_file.unlink(missing_ok=True)
+        return None
 
 
 def convert_single_pdf(
@@ -995,23 +1063,56 @@ def convert_single_docx(docx_path: Path, output_dir: Path) -> None:
     print(f"  Deleted source: {docx_path.name}")
 
 
+def _namespace_chunk_images(
+    markdown: str,
+    images: dict[str, bytes],
+    chunk_index: int,
+) -> tuple[str, dict[str, bytes]]:
+    """Give each chunk a private image directory and rewrite its references."""
+    prefix = f"images/chunk-{chunk_index:03d}/"
+    mapping: dict[str, str] = {}
+    namespaced: dict[str, bytes] = {}
+
+    for raw_path, data in images.items():
+        normalized = str(raw_path).replace("\\", "/")
+        marker = "images/"
+        suffix = normalized.split(marker, 1)[1] if marker in normalized else Path(normalized).name
+        old_path = f"images/{suffix}"
+        new_path = f"{prefix}{suffix}"
+        mapping[old_path] = new_path
+        namespaced[new_path] = data
+
+    def _rewrite(raw: str) -> str:
+        value = str(raw or "").strip()
+        candidate = value[2:] if value.startswith("./") else value
+        if "/images/" in candidate:
+            candidate = f"images/{candidate.split('/images/', 1)[1]}"
+        return mapping.get(candidate, value)
+
+    markdown = re.sub(
+        r"(!\[[^\]]*\]\()([^)]+)(\))",
+        lambda match: f"{match.group(1)}{_rewrite(match.group(2))}{match.group(3)}",
+        markdown,
+    )
+    markdown = re.sub(
+        r'(<img\b[^>]*\bsrc=["\'])([^"\']+)(["\'][^>]*>)',
+        lambda match: f"{match.group(1)}{_rewrite(match.group(2))}{match.group(3)}",
+        markdown,
+        flags=re.IGNORECASE,
+    )
+    return markdown, namespaced
+
+
 def _merge_zips(zip_list: list[bytes]) -> bytes:
-    """Merge multiple MinerU result ZIPs into a single ZIP."""
+    """Merge MinerU ZIPs while isolating same-named images by chunk."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as out:
         for i, zip_data in enumerate(zip_list):
-            with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-                for name in zf.namelist():
-                    if name.endswith("/"):
-                        continue
-                    # Prefix chunk index to markdown files to avoid collisions
-                    if name.endswith(".md"):
-                        out_name = f"chunk_{i:03d}/{name}"
-                    else:
-                        # Images can share names across chunks — keep originals
-                        out_name = name
-                    if out_name not in out.namelist():
-                        out.writestr(out_name, zf.read(name))
+            markdown, images = extract_zip_contents(zip_data)
+            markdown, images = _namespace_chunk_images(markdown, images, i)
+            out.writestr(f"chunk_{i:03d}/full.md", markdown)
+            for name, data in images.items():
+                out.writestr(name, data)
     return buf.getvalue()
 
 
@@ -1060,6 +1161,7 @@ def _convert_large_pdf(
                     model_version=model_version,
                 )
                 _write_chunk_cache(parent_md5, index, zip_data, model_version)
+            md, images = _namespace_chunk_images(md, images, index)
             parts.append(md)
             all_images.update(images)
             all_zips.append(zip_data)

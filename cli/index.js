@@ -7,11 +7,11 @@
  *   gitshelf <command> [options]
  *
  * Config (in order of priority):
- *   --token <pat>       GitHub Personal Access Token
+ *   --token <pat>       GitHub Personal Access Token (environment variable preferred)
  *   --repo <owner/name> Target repository
  *   GITSHELF_TOKEN      Environment variable for token
  *   GITSHELF_REPO       Environment variable for repo
- *   .gitshelfrc         Optional JSON config in current directory
+ *   .gitshelfrc         Optional JSON config in current directory (repo only recommended)
  *   ~/.config/gitshelf/config.json  Default JSON config for npx/global use
  *                                  (or $XDG_CONFIG_HOME/gitshelf/config.json)
  */
@@ -35,7 +35,7 @@ Commands:
   mcp                          Start MCP server (stdio transport)
 
 Options:
-  --token <pat>       GitHub PAT (or set GITSHELF_TOKEN)
+  --token <pat>       GitHub PAT (prefer the GITSHELF_TOKEN environment variable)
   --repo <owner/name> Repository (or set GITSHELF_REPO)
   --json              Output as JSON (for agent consumption)
   --yes               Skip confirmation prompts
@@ -48,7 +48,11 @@ Examples:
   gitshelf delete doc:old-doc --yes
 
 Example .gitshelfrc:
-  { "repo": "owner/repo", "token": "github_pat_..." }
+  { "repo": "owner/repo" }
+
+Security:
+  Keep tokens in GITSHELF_TOKEN or a system secret store. Tokens in command
+  arguments or JSON config files may be exposed through history or plaintext files.
 
 Default config file:
   ~/.config/gitshelf/config.json

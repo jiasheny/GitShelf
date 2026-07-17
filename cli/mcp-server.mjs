@@ -13,8 +13,10 @@
  * Config (same as CLI):
  *   GITSHELF_TOKEN   GitHub Personal Access Token
  *   GITSHELF_REPO    Target repository (owner/name)
- *   .gitshelfrc      Optional JSON config in current directory
- *   ~/.config/gitshelf/config.json  Global config
+ *   .gitshelfrc      Optional JSON config in current directory (repo only recommended)
+ *   ~/.config/gitshelf/config.json  Global config (repo only recommended)
+ * Keep tokens in the environment or a system secret store; JSON tokens are
+ * supported for compatibility but are stored as plaintext.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import os
+import random
 import time
 import zipfile
 from pathlib import Path
@@ -17,6 +18,8 @@ import requests
 BASE_URL = "https://mineru.net/api/v4"
 MODEL_VERSION = "vlm"
 SUPPORTED_MODEL_VERSIONS = {"pipeline", "vlm"}
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+MAX_REQUEST_ATTEMPTS = 4
 
 
 class MineruError(Exception):
@@ -123,7 +126,10 @@ class MineruClient:
             "enable_formula": True,
             "enable_table": True,
         }
-        resp = requests.post(url, headers=self._headers(), json=payload, timeout=30)
+        resp = _request_with_retry(
+            lambda: requests.post(url, headers=self._headers(), json=payload, timeout=30),
+            "request upload URL",
+        )
         body = _parse_response(resp, "request upload URL")
         data = body["data"]
         batch_id: str = data["batch_id"]
@@ -134,8 +140,11 @@ class MineruClient:
 
     def _upload_file(self, upload_url: str, document_path: Path) -> None:
         """PUT the document binary to the pre-signed upload URL."""
-        with document_path.open("rb") as f:
-            resp = requests.put(upload_url, data=f, timeout=300)
+        def _upload_once() -> requests.Response:
+            with document_path.open("rb") as file_handle:
+                return requests.put(upload_url, data=file_handle, timeout=300)
+
+        resp = _request_with_retry(_upload_once, "upload document")
         if resp.status_code != 200:
             raise MineruError(
                 f"File upload failed: status={resp.status_code} "
@@ -162,10 +171,13 @@ class MineruClient:
                     f"(batch_id={batch_id})"
                 )
 
-            resp = requests.get(
-                url,
-                headers=self._headers(),
-                timeout=30,
+            resp = _request_with_retry(
+                lambda: requests.get(
+                    url,
+                    headers=self._headers(),
+                    timeout=30,
+                ),
+                "poll extraction status",
             )
             body = _parse_response(resp, "poll extraction status")
             results = body["data"]["extract_result"]
@@ -200,6 +212,46 @@ class MineruClient:
 # ------------------------------------------------------------------
 
 
+def _retry_delay(response: requests.Response | None, attempt: int) -> float:
+    if response is not None:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return max(0.0, min(float(retry_after), 60.0))
+            except ValueError:
+                pass
+    return min(2 ** (attempt - 1), 20) + random.uniform(0, 0.5)
+
+
+def _request_with_retry(request_once, context: str) -> requests.Response:
+    """Retry transient network failures and rate limits with bounded backoff."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+        response: requests.Response | None = None
+        try:
+            response = request_once()
+            if response.status_code not in RETRYABLE_STATUS_CODES:
+                return response
+        except requests.RequestException as exc:
+            last_error = exc
+
+        if attempt == MAX_REQUEST_ATTEMPTS:
+            if response is not None:
+                return response
+            raise MineruError(
+                f"Network error during {context} after {MAX_REQUEST_ATTEMPTS} attempts: {last_error}"
+            ) from last_error
+
+        delay = _retry_delay(response, attempt)
+        print(
+            f"  Temporary MinerU error during {context}; retrying in {delay:.1f}s "
+            f"({attempt}/{MAX_REQUEST_ATTEMPTS - 1})"
+        )
+        time.sleep(delay)
+
+    raise AssertionError("unreachable")
+
+
 def _parse_response(resp: requests.Response, context: str) -> dict:
     """Validate an API response and return the parsed JSON body.
 
@@ -230,7 +282,10 @@ def _parse_response(resp: requests.Response, context: str) -> dict:
 
 def _download_zip(zip_url: str) -> bytes:
     """Download a result ZIP and return the raw bytes."""
-    resp = requests.get(zip_url, timeout=120)
+    resp = _request_with_retry(
+        lambda: requests.get(zip_url, timeout=120),
+        "download result ZIP",
+    )
     if resp.status_code != 200:
         raise MineruError(
             f"Failed to download result ZIP: status={resp.status_code} "

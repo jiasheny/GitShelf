@@ -112,6 +112,38 @@ class ChunkedPdfUploadTest(unittest.TestCase):
             with fitz.open(upload.pdf_path) as document:
                 self.assertEqual(document.page_count, 3)
 
+    def test_targeted_manifest_ignores_unrelated_broken_upload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            upload_dir = root / "uploads" / "valid"
+            input_dir.mkdir()
+            original = root / "original.pdf"
+            self._write_pdf(original, ["valid"])
+            payload = original.read_bytes()
+            upload_dir.mkdir(parents=True)
+            (upload_dir / "part-00001.part").write_bytes(payload)
+
+            broken = input_dir / "broken.parts.json"
+            broken.write_text("{not-json", encoding="utf-8")
+            valid = input_dir / "valid.parts.json"
+            valid.write_text(json.dumps({
+                "version": 1,
+                "assembly": "bytes",
+                "filename": "valid.pdf",
+                "file_size": len(payload),
+                "parts": ["uploads/valid/part-00001.part"],
+            }), encoding="utf-8")
+
+            assembled = process.assemble_chunked_uploads(
+                input_dir,
+                manifest_names={valid.name},
+            )
+
+            self.assertEqual(list(assembled), [valid.name])
+            self.assertTrue((input_dir / "valid.pdf").exists())
+            self.assertTrue(broken.exists())
+
 
 class EpubProcessingTest(unittest.TestCase):
     def test_process_epub_converts_to_pdf_and_reuses_pdf_pipeline(self) -> None:
@@ -145,6 +177,39 @@ class EpubProcessingTest(unittest.TestCase):
             self.assertEqual(args[0].suffix, ".pdf")
             self.assertEqual(args[0].name, "sample.pdf")
             self.assertGreater(len(converted_pdfs), 0)
+
+    def test_background_queue_skips_known_failures_and_processes_new_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            output_dir = root / "docs"
+            input_dir.mkdir()
+            output_dir.mkdir()
+            failed_path = input_dir / "failed.md"
+            fresh_path = input_dir / "fresh.md"
+            failed_path.write_text("# Failed\n", encoding="utf-8")
+            fresh_path.write_text("# Fresh\n", encoding="utf-8")
+            (output_dir / process.FAILURES_FILENAME).write_text(json.dumps({
+                "failures": [{"filename": failed_path.name, "error": "previous failure"}],
+            }), encoding="utf-8")
+
+            argv = sys.argv[:]
+            try:
+                sys.argv = [
+                    "process.py",
+                    "--input-dir",
+                    str(input_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ]
+                with patch.dict(os.environ, {"INPUT_FILENAME": ""}, clear=False):
+                    process.main()
+            finally:
+                sys.argv = argv
+
+            self.assertTrue(failed_path.exists())
+            self.assertFalse(fresh_path.exists())
+            self.assertTrue((output_dir / "articles" / "fresh" / "content.md").exists())
 
     def test_main_reconverts_missing_epub_via_pdf_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

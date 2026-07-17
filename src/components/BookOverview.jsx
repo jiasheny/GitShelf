@@ -15,6 +15,38 @@ function safeFilename(value) {
     .trim() || 'book';
 }
 
+function OverviewToc({ items, encodedBookId, nested = false }) {
+  return (
+    <ol class={`book-overview-toc${nested ? ' book-overview-toc--nested' : ''}`}>
+      {items.map((item, index) => {
+        const key = item.slug || item.anchor || `${item.title}-${index}`;
+        const content = (
+          <>
+            <span class="book-overview-toc-title">{item.title}</span>
+            {item.children?.length > 0 && (
+              <span class="book-overview-toc-count">{item.children.length} sections</span>
+            )}
+          </>
+        );
+        return (
+          <li key={key} class="book-overview-toc-item">
+            {item.slug ? (
+              <a class="book-overview-toc-link" href={`#/books/${encodedBookId}/${encodeURIComponent(item.slug)}${item.anchor ? `#${encodeURIComponent(item.anchor)}` : ''}`}>
+                {content}
+              </a>
+            ) : (
+              <div class="book-overview-toc-link book-overview-toc-group">{content}</div>
+            )}
+            {item.children?.length > 0 && (
+              <OverviewToc items={item.children} encodedBookId={encodedBookId} nested />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function BookOverview({ bookId, onTocLoaded }) {
   const [tocData, setTocData] = useState(null);
   const [bookMeta, setBookMeta] = useState(null);
@@ -62,7 +94,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
   const items = tocData.children;
   const totalChapters = bookMeta?.chapters_count || items.length;
   const wordCount = bookMeta?.word_count || 0;
-  const firstChapter = items.find((item) => item.slug) || null;
+  const firstChapter = flattenChapters(items)[0] || null;
   const encodedBookId = encodeURIComponent(bookId);
 
   const downloading = Boolean(downloadProgress);
@@ -162,18 +194,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
         {downloadError && <p class="admin-error" role="alert">{downloadError}</p>}
       </div>
 
-      <ol class="book-overview-toc">
-        {items.map((item) => (
-          <li key={item.slug} class="book-overview-toc-item">
-            <a class="book-overview-toc-link" href={`#/books/${encodedBookId}/${encodeURIComponent(item.slug)}`}>
-              <span class="book-overview-toc-title">{item.title}</span>
-              {item.children && item.children.length > 0 && (
-                <span class="book-overview-toc-count">{item.children.length} sections</span>
-              )}
-            </a>
-          </li>
-        ))}
-      </ol>
+      <OverviewToc items={items} encodedBookId={encodedBookId} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminPanel from '../../src/components/AdminView';
+import { clearPat, setPat } from '../../src/lib/github-api';
 
 function createGithubResponse(data, status = 200) {
   return {
@@ -27,6 +28,14 @@ function createAdminFetch(options = {}) {
 
     if (target === 'https://api.github.com/user') {
       return createGithubResponse({ login: 'owner' });
+    }
+
+    if (target === 'https://api.github.com/repos/owner/repo') {
+      return createGithubResponse({ full_name: 'owner/repo' });
+    }
+
+    if (target.startsWith('https://api.github.com/repos/owner/repo/actions/workflows/convert.yml/runs?')) {
+      return createGithubResponse({ workflow_runs: [] });
     }
 
     if (target === 'https://api.github.com/repos/owner/repo/contents/docs/catalog-metadata.json') {
@@ -72,6 +81,7 @@ function createAdminFetch(options = {}) {
 describe('frontend admin flows', () => {
   beforeEach(() => {
     cleanup();
+    clearPat();
     localStorage.clear();
     sessionStorage.clear();
     document.documentElement.setAttribute('data-theme', 'light');
@@ -117,7 +127,7 @@ describe('frontend admin flows', () => {
   });
 
   it('renders type-aware links from catalog items and only exposes re-process for books', async () => {
-    localStorage.setItem('github_pat', 'token');
+    setPat('token');
     localStorage.setItem('admin_repo_owner', 'owner');
     localStorage.setItem('admin_repo_name', 'repo');
     global.fetch = createAdminFetch({

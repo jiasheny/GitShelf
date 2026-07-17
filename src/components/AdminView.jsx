@@ -4,12 +4,28 @@ import ConfirmDialog from './ConfirmDialog';
 import {
   getPat, setPat, clearPat, verifyPat, detectRepo, saveRepo,
   fetchCatalog, persistCatalog, deepCloneItems,
-  uploadContent as apiUploadContent, triggerReconvert, deleteItemPermanently,
+  uploadContent as apiUploadContent, fetchConversionStatus, triggerReconvert, deleteItemPermanently,
   loadHistory, fetchFailures, dismissFailure, retryFailure,
   getDisplayTitle, normalizeVisibility,
   normalizeTags, parseTagsInput, formatBytes, dateFormatter, dateTimeFormatter,
   numberFormatter, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, MAX_LARGE_PDF_SIZE, VISIBILITY_VALUES, toIsoNow,
 } from '../lib/github-api';
+
+const TRACKED_CONVERSION_KEY = 'gitshelf_tracked_conversion';
+
+function loadTrackedConversion() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(TRACKED_CONVERSION_KEY) || 'null');
+    return value?.job ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTrackedConversion(value) {
+  if (value?.job) sessionStorage.setItem(TRACKED_CONVERSION_KEY, JSON.stringify(value));
+  else sessionStorage.removeItem(TRACKED_CONVERSION_KEY);
+}
 
 const CONTENT_TYPE_LABELS = {
   book: 'Book',
@@ -94,18 +110,18 @@ function getConversionLabel(item) {
 }
 
 // --- Auth View ---
-function AuthView({ onAuthenticated }) {
+function AuthView({ repo, onAuthenticated }) {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!token.trim()) { setError('Enter a GitHub PAT with repo scope.'); return; }
+    if (!token.trim()) { setError('Enter a GitHub access token.'); return; }
     setLoading(true); setError('');
     try {
       setPat(token.trim());
-      await verifyPat();
+      await verifyPat(repo);
       onAuthenticated();
     } catch (err) {
       clearPat(); setError(err.message);
@@ -115,34 +131,104 @@ function AuthView({ onAuthenticated }) {
   return (
     <div class="admin-auth">
       <h2>GitHub Authentication</h2>
-      <p>Enter a Personal Access Token with <strong>repo</strong> scope.</p>
+      <p>Use a fine-grained token limited to this repository, with <strong>Contents</strong> and <strong>Actions</strong> read/write access. It is kept only in this page and is forgotten when you reload or close it.</p>
       <form onSubmit={handleSubmit}>
         <div class="admin-input-group">
-          <input type="password" class="admin-pat-input" value={token} onInput={(e) => setToken(e.target.value)} placeholder="ghp_…" autocomplete="off" aria-label="GitHub Personal Access Token" />
+          <input type="password" class="admin-pat-input" value={token} onInput={(e) => setToken(e.target.value)} placeholder="github_pat_…" autocomplete="off" aria-label="GitHub Personal Access Token" />
           <button class="btn btn-primary" type="submit" disabled={loading}>
             {loading ? <><span class="spinner" /> Verifying…</> : 'Save Token'}
           </button>
         </div>
       </form>
       {error && <p class="admin-error">{error}</p>}
-      <p><a class="admin-text-link" href="https://github.com/settings/tokens/new?scopes=repo&description=GitShelf%20Admin" target="_blank" rel="noopener noreferrer">Create a new token on GitHub</a></p>
+      <p><a class="admin-text-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Create a fine-grained token on GitHub</a></p>
     </div>
   );
 }
 
 // --- Upload Section ---
 function UploadSection({ repo, disabled }) {
-  const [progress, setProgress] = useState(null);
+  const [progress, setProgress] = useState(loadTrackedConversion);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const uploadingRef = useRef(false);
+  const statusFailuresRef = useRef(0);
   let dragCounter = 0;
   const acceptedExtensionsLabel = ACCEPTED_EXTENSIONS.map((ext) => `.${ext}`).join(',');
   const acceptedExtensionsText = ACCEPTED_EXTENSIONS.map((ext) => `.${ext}`).join(', ');
 
+  useEffect(() => {
+    const job = progress?.job;
+    if (!job || !repo.owner || !repo.name) return undefined;
+    const jobRepoMismatch = job.owner && job.name
+      && (job.owner.toLowerCase() !== repo.owner.toLowerCase() || job.name.toLowerCase() !== repo.name.toLowerCase());
+    if (jobRepoMismatch) {
+      if (progress.stage !== 'unknown') {
+        const next = {
+          ...progress,
+          stage: 'unknown',
+          msg: `This status belongs to ${job.owner}/${job.name}. Clear it or switch back to that repository.`,
+        };
+        setProgress(next);
+        saveTrackedConversion(next);
+      }
+      return undefined;
+    }
+    if (['complete', 'failed', 'unknown', 'status-unavailable'].includes(progress.stage)) return undefined;
+
+    let cancelled = false;
+    let timer;
+    const poll = async () => {
+      try {
+        const status = await fetchConversionStatus(repo, job);
+        if (cancelled) return;
+        statusFailuresRef.current = 0;
+        const next = { ...progress, ...status, msg: status.message, job };
+        setProgress(next);
+        saveTrackedConversion(next);
+        if (status.stage === 'complete') {
+          showToast(`${job.filename} is now available on the shelf`, 'success');
+          window.dispatchEvent(new CustomEvent('gitshelf:catalog-updated'));
+          return;
+        }
+        if (status.stage === 'failed') {
+          showToast(`${job.filename} could not be converted`, 'error');
+          window.dispatchEvent(new CustomEvent('gitshelf:catalog-updated'));
+          return;
+        }
+        if (['unknown', 'status-unavailable'].includes(status.stage)) return;
+      } catch (err) {
+        if (cancelled) return;
+        statusFailuresRef.current += 1;
+        const permanent = [401, 403, 404, 429].includes(err.status) || statusFailuresRef.current >= 5;
+        const next = {
+          ...progress,
+          stage: permanent ? 'status-unavailable' : progress.stage,
+          msg: permanent
+            ? 'Automatic status checks are unavailable. Check the token’s Actions permission, then clear this status to continue.'
+            : 'Status check was interrupted. Retrying automatically...',
+          statusError: err.message,
+          job,
+        };
+        setProgress(next);
+        saveTrackedConversion(next);
+        if (permanent) return;
+      }
+      const delay = Math.min(60_000, 8000 * (2 ** statusFailuresRef.current));
+      timer = setTimeout(poll, delay);
+    };
+
+    timer = setTimeout(poll, 1500);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [progress?.job?.commitSha, progress?.job?.queuedAt, repo.owner, repo.name]);
+
   const handleFile = async (file) => {
-    if (!file || disabled || uploadingRef.current) return;
+    if (!file || disabled || uploadingRef.current || ['queued', 'processing', 'deploying'].includes(progress?.stage)) return;
     uploadingRef.current = true;
+    statusFailuresRef.current = 0;
     setError('');
     const ext = file.name.split('.').pop().toLowerCase();
     if (!ACCEPTED_EXTENSIONS.includes(ext)) {
@@ -157,11 +243,20 @@ function UploadSection({ repo, disabled }) {
       return;
     }
     try {
-      await apiUploadContent(file, repo, (stage, msg, details = {}) => {
+      const job = await apiUploadContent(file, repo, (stage, msg, details = {}) => {
         setProgress({ stage, msg, filename: file.name, fileSize: file.size, ...details });
       });
-      setProgress({ stage: 'done', msg: 'uploaded', filename: file.name, fileSize: file.size, percent: 100 });
-      showToast('Content uploaded successfully', 'success');
+      const next = {
+        stage: 'queued',
+        msg: 'Upload complete. Waiting for conversion to start...',
+        filename: file.name,
+        fileSize: file.size,
+        percent: 8,
+        job: { ...job, fileSize: file.size, owner: repo.owner, name: repo.name },
+      };
+      setProgress(next);
+      saveTrackedConversion(next);
+      showToast('Upload complete. Conversion is queued.', 'success');
     } catch (err) {
       setError(err.message);
       setProgress({ stage: 'error', msg: 'Upload failed.', filename: file.name, fileSize: file.size, percent: 0 });
@@ -170,9 +265,20 @@ function UploadSection({ repo, disabled }) {
     }
   };
 
-  const toneMap = { reading: 'info', splitting: 'info', preparing: 'info', uploading: 'info', done: 'success', error: 'error' };
-  const uploading = progress && !['done', 'error'].includes(progress.stage);
-  const actionsUrl = repo.owner && repo.name ? `https://github.com/${repo.owner}/${repo.name}/actions` : null;
+  const toneMap = {
+    reading: 'info', splitting: 'info', preparing: 'info', uploading: 'info',
+    queued: 'info', processing: 'info', deploying: 'info', complete: 'success',
+    done: 'success', failed: 'error', error: 'error', unknown: 'warning',
+    'status-unavailable': 'error',
+  };
+  const uploading = progress && !['done', 'complete', 'failed', 'error', 'unknown', 'status-unavailable'].includes(progress.stage);
+  const actionsUrl = progress?.deployUrl || progress?.runUrl || (repo.owner && repo.name ? `https://github.com/${repo.owner}/${repo.name}/actions` : null);
+  const clearable = progress && ['complete', 'failed', 'error', 'unknown', 'status-unavailable'].includes(progress.stage);
+  const clearProgress = () => {
+    setProgress(null);
+    saveTrackedConversion(null);
+    statusFailuresRef.current = 0;
+  };
 
   return (
     <section class="admin-upload">
@@ -212,12 +318,7 @@ function UploadSection({ repo, disabled }) {
           <div class="upload-dropzone-hint">PDF up to 500 MB · other files up to 100 MB</div>
         </div>
       )}
-      {progress && progress.stage === 'done' && actionsUrl ? (
-        <div class="upload-progress upload-progress--success">
-          <strong>{progress.filename}</strong> uploaded. A GitHub Action is now converting it.{' '}
-          <a class="upload-progress-link" href={actionsUrl} target="_blank" rel="noopener noreferrer">View conversion progress</a>
-        </div>
-      ) : progress ? (
+      {progress ? (
         <div class={`upload-progress upload-progress--${toneMap[progress.stage] || 'info'}`} aria-live="polite">
           <div class="upload-progress-header">
             <strong>{progress.filename}</strong>
@@ -230,6 +331,12 @@ function UploadSection({ repo, disabled }) {
             <span>{progress.msg}</span>
             <strong>{progress.percent || 0}%</strong>
           </div>
+          {actionsUrl && progress.job ? (
+            <a class="upload-progress-link" href={actionsUrl} target="_blank" rel="noopener noreferrer">View technical details</a>
+          ) : null}
+          {clearable ? (
+            <button class="btn btn-secondary btn-sm" type="button" onClick={clearProgress}>Clear status</button>
+          ) : null}
         </div>
       ) : null}
       {error && <p class="admin-error">{error}</p>}
@@ -482,8 +589,15 @@ function CatalogSection({ repo }) {
     return 0; // public_order — default
   });
 
+  useEffect(() => {
+    setSelected(new Set());
+  }, [search, visFilter]);
+
+  const selectedFilteredCount = filtered.reduce((count, item) => count + (selected.has(item.id) ? 1 : 0), 0);
+  const allFilteredSelected = filtered.length > 0 && selectedFilteredCount === filtered.length;
+
   const toggleSelect = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll = () => setSelected((s) => s.size === filtered.length ? new Set() : new Set(filtered.map((b) => b.id)));
+  const toggleAll = () => setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((b) => b.id)));
 
   const bulkVisibility = async (vis) => {
     if (selected.size === 0) { setBulkError('Select at least one item.'); return; }
@@ -639,7 +753,7 @@ function CatalogSection({ repo }) {
           {/* Desktop grid table */}
           <div class="admin-catalog-grid">
             <div class="admin-catalog-grid-head">
-              <div class="admin-grid-cell admin-grid-cell--check"><input type="checkbox" class="admin-checkbox" checked={selected.size === filtered.length && filtered.length > 0} indeterminate={selected.size > 0 && selected.size < filtered.length} onChange={toggleAll} aria-label="Select all items" /></div>
+              <div class="admin-grid-cell admin-grid-cell--check"><input type="checkbox" class="admin-checkbox" checked={allFilteredSelected} indeterminate={selectedFilteredCount > 0 && !allFilteredSelected} onChange={toggleAll} aria-label="Select all visible items" /></div>
               <div class="admin-grid-cell">Title</div>
               <div class="admin-grid-cell">Status</div>
               <div class="admin-grid-cell">Source</div>
@@ -830,8 +944,8 @@ function SettingsSection({ repo, onRepoChange }) {
       <div class="admin-setting-group">
         <h3 class="admin-subheading">Authentication</h3>
         <div class="admin-actions">
-          <button class="btn btn-secondary" onClick={() => { clearPat(); window.location.reload(); }}>Update PAT</button>
-          <button class="btn btn-danger" onClick={() => setShowClearPat(true)}>Clear PAT</button>
+          <button class="btn btn-secondary" onClick={() => { clearPat(); window.location.reload(); }}>Change token</button>
+          <button class="btn btn-danger" onClick={() => setShowClearPat(true)}>Sign out</button>
         </div>
       </div>
 
@@ -839,13 +953,13 @@ function SettingsSection({ repo, onRepoChange }) {
 
       <ConfirmDialog
         open={showClearPat}
-        title="Clear Personal Access Token"
+        title="Sign out of GitShelf Admin"
         danger
-        confirmLabel="Clear Token"
+        confirmLabel="Sign out"
         onConfirm={() => { clearPat(); window.location.reload(); }}
         onCancel={() => setShowClearPat(false)}
       >
-        <p>Your GitHub PAT will be removed from local storage. You'll need to re-authenticate to use the admin panel.</p>
+        <p>Your GitHub token will be removed from this page. You'll need to authenticate again to use the admin panel.</p>
       </ConfirmDialog>
     </section>
   );
@@ -872,7 +986,7 @@ export default function AdminPanel() {
     return (
       <div class="admin-panel view-enter">
         <h1 class="admin-page-title">Admin</h1>
-        <AuthView onAuthenticated={() => setAuthenticated(true)} />
+        <AuthView repo={repo} onAuthenticated={() => setAuthenticated(true)} />
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { _normalizeBullets as normalizeBullets } from '../../src/lib/markdown';
+import { _normalizeBullets as normalizeBullets, renderMarkdown } from '../../src/lib/markdown';
 
 describe('normalizeBullets', () => {
   it('converts • to list syntax', () => {
@@ -42,5 +42,28 @@ describe('normalizeBullets', () => {
   it('handles bullet mid-line (no conversion)', () => {
     const text = 'This has a • bullet in the middle';
     expect(normalizeBullets(text)).toBe(text);
+  });
+});
+
+describe('renderMarkdown security', () => {
+  it('removes scripts, event handlers, and unquoted javascript URLs', () => {
+    const html = renderMarkdown('<script>alert(1)</script><img src=x onerror=alert(2)><a href=javascript:alert(3)>bad</a>');
+    const container = document.createElement('div');
+    container.innerHTML = html;
+
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('img')).not.toHaveAttribute('onerror');
+    expect(container.querySelector('a')).not.toHaveAttribute('href');
+    expect(html.toLowerCase()).not.toContain('javascript:');
+  });
+
+  it('blocks dangerous SVG and inline styling while preserving tables', () => {
+    const html = renderMarkdown('<svg><a href="javascript:alert(1)">x</a></svg><p style="background:url(javascript:alert(2))">text</p>\n\n| A | B |\n| - | - |\n| 1 | 2 |');
+    const container = document.createElement('div');
+    container.innerHTML = html;
+
+    expect(html.toLowerCase()).not.toContain('javascript:');
+    expect(container.querySelector('p')).not.toHaveAttribute('style');
+    expect(container.querySelector('table')).not.toBeNull();
   });
 });

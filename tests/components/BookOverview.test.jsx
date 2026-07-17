@@ -54,6 +54,36 @@ afterEach(() => {
 });
 
 describe('BookOverview Markdown downloads', () => {
+  it('finds the first readable chapter inside nested TOC groups', async () => {
+    global.fetch = vi.fn((url) => {
+      if (String(url).includes('toc.json')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            title: 'Nested Book',
+            children: [{ title: 'Part One', children: [{ title: 'Chapter One', slug: 'chapter-one' }] }],
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ items: [{ id: 'my-book', title: 'Nested Book' }] }),
+      });
+    });
+
+    render(<BookOverview bookId="my-book" onTocLoaded={() => {}} />);
+
+    expect(await screen.findByRole('link', { name: 'Start Reading' })).toHaveAttribute(
+      'href',
+      '#/books/my-book/chapter-one',
+    );
+    expect(screen.getByText('Part One').closest('a')).toBeNull();
+    expect(screen.getByRole('link', { name: /Chapter One/ })).toHaveAttribute(
+      'href',
+      '#/books/my-book/chapter-one',
+    );
+  });
+
   it('downloads all chapters as one text-only Markdown file', async () => {
     render(<BookOverview bookId="my-book" onTocLoaded={() => {}} />);
 

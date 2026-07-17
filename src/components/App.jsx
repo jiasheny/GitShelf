@@ -75,7 +75,7 @@ export function App() {
       fetchManifest().then((manifest) => {
         const item = manifest.items?.find((i) => i.id === route.siteId);
         if (item?.entry) {
-          window.open(`./${item.entry}`, '_blank');
+          window.open(`./${item.entry}`, '_blank', 'noopener,noreferrer');
         }
         location.hash = '#/';
       });

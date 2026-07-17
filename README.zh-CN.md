@@ -30,22 +30,23 @@
 
 1. 在你的 Fork 中，进入 **Settings > Secrets and variables > Actions**
 2. 点击 **New repository secret**，名称填 `VITE_SITE_PASSWORD`，值填你的密码
-3. 重新部署 — 访客需输入密码才能访问站点
+3. 重新部署 — 访客需输入密码才能进入书架界面
 
-> 不设置则站点保持公开访问。
+> 此功能只是浏览界面锁，不是真正的私密访问控制。公开仓库中的 Markdown、图片和其他文件仍可通过 GitHub 直接访问。私密资料请使用私有仓库与带服务端身份验证的托管方案。
 
 ### 4. 上传内容
 
 1. 访问站点，点击顶栏的齿轮图标
-2. 输入具有 `repo` 权限的 GitHub **Personal Access Token**
-   （[点此创建](https://github.com/settings/tokens/new?scopes=repo&description=GitShelf)）
+2. 输入仅授权给本仓库的 GitHub **细粒度 Personal Access Token**，授予
+   **Contents** 和 **Actions** 读写权限（[点此创建](https://github.com/settings/personal-access-tokens/new)）。
+   网页只会把令牌保存在当前页面内存中，刷新后需要重新授权。
 3. 上传文件：
    - **`.pdf`** — 通过 MinerU API 转换为多章节书籍
    - **`.epub`** — 先用 Calibre 转成 PDF，再复用和 PDF 相同的章节转换流程
    - **`.docx`** — 直接按 Word 原生结构解析，不使用 OCR
    - **`.md`** — 直接作为文档渲染展示
    - **`.zip`** — 解压为静态站点（需包含 `index.html`）
-4. 等待 GitHub Actions 处理完成
+4. 在上传面板查看转换和发布进度（需要时可点链接查看 Actions 详细日志）
 5. 内容出现在首页！
 
 ## 内容类型
