@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-16T12:47:07Z",
+  "generated_at": "2026-07-20T10:56:59Z",
   "items": [
     {
       "id": "fire-firesmoke-dampers-andmaintenance-imeg",
@@ -96,6 +96,30 @@
       "conversion_method": null,
       "model_version": null,
       "ocr_used": null
+    },
+    {
+      "id": "系统思维下的精准调控-供冷系统预调试与平衡关键点解析",
+      "type": "book",
+      "title": "系统思维下的精准调控——供冷系统预调试与平衡关键点解析",
+      "generated_title": "系统思维下的精准调控——供冷系统预调试与平衡关键点解析",
+      "display_title": null,
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "manual_order": null,
+      "visibility": "published",
+      "metadata_updated_at": null,
+      "chapters_count": 1,
+      "word_count": 942,
+      "source_format": "markdown-derived",
+      "created_at": "2026-07-20T10:56:59Z",
+      "updated_at": "2026-07-20T10:56:59Z",
+      "source": "系统思维下的精准调控——供冷系统预调试与平衡关键点解析.pdf",
+      "page_count": 30,
+      "conversion_method": "pdf-mixed-ocr",
+      "model_version": "vlm",
+      "ocr_used": true
     },
     {
       "id": "防火阀和排烟阀中美标准对比分析",
