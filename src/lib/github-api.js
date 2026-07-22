@@ -516,7 +516,7 @@ async function findResultCommit(repo, job) {
 async function deploymentStatus(repo, job, resultCommit, runUrl) {
   const resultSha = resultCommit.sha;
   const deployRuns = await githubApi(
-    `/repos/${repo.owner}/${repo.name}/actions/workflows/deploy-pages.yml/runs?branch=${REPO_WRITE_BRANCH}&event=push&head_sha=${resultSha}&per_page=10`,
+    `/repos/${repo.owner}/${repo.name}/actions/workflows/deploy-pages.yml/runs?branch=${REPO_WRITE_BRANCH}&head_sha=${resultSha}&per_page=10`,
   );
   const deploy = (deployRuns?.workflow_runs || []).find((candidate) => candidate.head_sha === resultSha);
   const resultTime = resultCommit?.commit?.committer?.date || resultCommit?.commit?.author?.date || job.queuedAt;
