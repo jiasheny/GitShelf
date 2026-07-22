@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T10:56:59Z",
+  "generated_at": "2026-07-22T11:53:02Z",
   "items": [
     {
       "id": "fire-firesmoke-dampers-andmaintenance-imeg",
@@ -24,6 +24,30 @@
       "conversion_method": null,
       "model_version": null,
       "ocr_used": null
+    },
+    {
+      "id": "firefighting-system-design1",
+      "type": "book",
+      "title": "firefighting system design1",
+      "generated_title": "firefighting system design1",
+      "display_title": null,
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "manual_order": null,
+      "visibility": "published",
+      "metadata_updated_at": null,
+      "chapters_count": 4,
+      "word_count": 7092,
+      "source_format": "markdown-derived",
+      "created_at": "2026-07-22T11:53:02Z",
+      "updated_at": "2026-07-22T11:53:02Z",
+      "source": "firefighting system design1.pdf",
+      "page_count": 74,
+      "conversion_method": "pdf-mixed-ocr",
+      "model_version": "vlm",
+      "ocr_used": true
     },
     {
       "id": "gb-50736-2012-民用建筑供暖通风与空气调节设计规范",

@@ -1,0 +1,362 @@
+{
+  "title": "firefighting system design1",
+  "children": [
+    {
+      "title": "Preface",
+      "slug": "00-preface"
+    },
+    {
+      "title": "EXPRESS RESIDENTIAL FIRE SPRINKLER DESIGN GUIDE",
+      "slug": "01-express-residential-fire-sprinkler-design-guide",
+      "children": [
+        {
+          "title": "DISCLAIMER",
+          "slug": "01-express-residential-fire-sprinkler-design-guide",
+          "anchor": "disclaimer"
+        },
+        {
+          "title": "THE EXPRESS RESIDENTIAL FIRE SPRINKLER DESIGN GUIDE",
+          "slug": "01-express-residential-fire-sprinkler-design-guide",
+          "anchor": "the-express-residential-fire-sprinkler-design-guide"
+        },
+        {
+          "title": "Part 1: Hydraulic Worksheet",
+          "slug": "01-express-residential-fire-sprinkler-design-guide",
+          "anchor": "part-1-hydraulic-worksheet"
+        },
+        {
+          "title": "Part 2: Sprinkler Target Zones",
+          "slug": "01-express-residential-fire-sprinkler-design-guide",
+          "anchor": "part-2-sprinkler-target-zones"
+        }
+      ]
+    },
+    {
+      "title": "QUESTIONS AND ANSWERS ABOUT THIS GUIDE",
+      "slug": "02-questions-and-answers-about-this-guide",
+      "children": [
+        {
+          "title": "What is the Purpose of the Guide?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "what-is-the-purpose-of-the-guide"
+        },
+        {
+          "title": "Who Can Use The Guide?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "who-can-use-the-guide"
+        },
+        {
+          "title": "How Does the Guide Relate to the Design Method of NFPA Standard 13-D?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "how-does-the-guide-relate-to-the-design-method-of-nfpa-standard-13-d"
+        },
+        {
+          "title": "Loops and Grids",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "loops-and-grids"
+        },
+        {
+          "title": "How Do Commercial and Residential Systems Differ?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "how-do-commercial-and-residential-systems-differ"
+        },
+        {
+          "title": "What Materials and Tools Are Needed?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "what-materials-and-tools-are-needed"
+        },
+        {
+          "title": "What Information Is Needed?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "what-information-is-needed"
+        },
+        {
+          "title": "Water Supply",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "water-supply"
+        },
+        {
+          "title": "Change in Elevation",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "change-in-elevation"
+        },
+        {
+          "title": "Sprinkler Specifications",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "sprinkler-specifications"
+        },
+        {
+          "title": "What Kinds of Homes Are Covered by the Guide?",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "what-kinds-of-homes-are-covered-by-the-guide"
+        },
+        {
+          "title": "Coverage Area",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "coverage-area"
+        },
+        {
+          "title": "Room Width",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "room-width"
+        },
+        {
+          "title": "Room Width and Coverage Area",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "room-width-and-coverage-area"
+        },
+        {
+          "title": "Design Water Flow (DWF) and Pressure",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "design-water-flow-dwf-and-pressure"
+        },
+        {
+          "title": "Single Sprinkler Head",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "single-sprinkler-head"
+        },
+        {
+          "title": "Multiple Sprinkler Heads",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "multiple-sprinkler-heads"
+        },
+        {
+          "title": "Maximum Flow Rate",
+          "slug": "02-questions-and-answers-about-this-guide",
+          "anchor": "maximum-flow-rate"
+        }
+      ]
+    },
+    {
+      "title": "PART 1: THE HYDRAULIC WORKSHEET",
+      "slug": "03-part-1-the-hydraulic-worksheet",
+      "children": [
+        {
+          "title": "1. Room Width and Coverage Area",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "1-room-width-and-coverage-area"
+        },
+        {
+          "title": "2. Sprinkler Head Specifications",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "2-sprinkler-head-specifications"
+        },
+        {
+          "title": "3. Design Water Flow (DWF) and Design Pressure",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "3-design-water-flow-dwf-and-design-pressure"
+        },
+        {
+          "title": "4. Water Pressure at the Public Main",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "4-water-pressure-at-the-public-main"
+        },
+        {
+          "title": "5. Pressure Losses Caused by Devices",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "5-pressure-losses-caused-by-devices"
+        },
+        {
+          "title": "A. Backflow Prevention Device; Check Valve",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "a-backflow-prevention-device-check-valve"
+        },
+        {
+          "title": "B. Water Meter",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "b-water-meter"
+        },
+        {
+          "title": "C. Valves",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "c-valves"
+        },
+        {
+          "title": "6. Pressure Losses in Underground Supply Piping",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "6-pressure-losses-in-underground-supply-piping"
+        },
+        {
+          "title": "7. Elevation Pressure Loss",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "7-elevation-pressure-loss"
+        },
+        {
+          "title": "8. Sum of Losses and Pressure at the Farthest Head",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "8-sum-of-losses-and-pressure-at-the-farthest-head"
+        },
+        {
+          "title": "9. Available Pressure for Piping",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "9-available-pressure-for-piping"
+        },
+        {
+          "title": "10. Selection of Pipe Type and Size",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "10-selection-of-pipe-type-and-size"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 18 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-18-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "HYDRAULIC WORKSHEET",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "hydraulic-worksheet"
+        },
+        {
+          "title": "6. PRESSURE LOSSES IN UNDERGROUND SUPPLY PIPING",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "6-pressure-losses-in-underground-supply-piping"
+        },
+        {
+          "title": "7. ELEVATION PRESSURE LOSS",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "7-elevation-pressure-loss"
+        },
+        {
+          "title": "8. SUM OF LOSSES AND SPRINKLER PRESSURE",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "8-sum-of-losses-and-sprinkler-pressure"
+        },
+        {
+          "title": "10. SELECTION OF PIPE TYPE AND SIZE",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "10-selection-of-pipe-type-and-size"
+        },
+        {
+          "title": "PART 2: SPRINKLER TARGET ZONES",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "part-2-sprinkler-target-zones"
+        },
+        {
+          "title": "The Target Zone Templet",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "the-target-zone-templet"
+        },
+        {
+          "title": "Limitations of Template Use",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "limitations-of-template-use"
+        },
+        {
+          "title": "Two Initial Steps",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "two-initial-steps"
+        },
+        {
+          "title": "Coverage Area",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "coverage-area"
+        },
+        {
+          "title": "Creating a Target Zone",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "creating-a-target-zone"
+        },
+        {
+          "title": "Three Types of Rooms",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "three-types-of-rooms"
+        },
+        {
+          "title": "Sidewall Sprinklers",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "sidewall-sprinklers"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 12 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-12-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 14 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-14-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 18 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-18-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 20 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-20-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 22 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-22-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 24 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-24-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 26 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-26-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 28 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-28-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 30 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-30-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "ALLOWABLE INSIDE PIPE LENGTHS AT 32 GPM DESIGN WATER FLOW (DWF)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "allowable-inside-pipe-lengths-at-32-gpm-design-water-flow-dwf"
+        },
+        {
+          "title": "HYDRAULIC WORKSHEET",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "hydraulic-worksheet"
+        },
+        {
+          "title": "6. PRESSURE LOSSES IN UNDERGROUND SUPPLY PIPING",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "6-pressure-losses-in-underground-supply-piping"
+        },
+        {
+          "title": "ELEVATION PRESSURE LOSS",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "elevation-pressure-loss"
+        },
+        {
+          "title": "8. SUM OF LOSSES AND SPRINKLER PRESSURE",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "8-sum-of-losses-and-sprinkler-pressure"
+        },
+        {
+          "title": "AVAILABLE PRESSURE FOR PIPING",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "available-pressure-for-piping"
+        },
+        {
+          "title": "10. SELECTION OF PIPE TYPE AND SIZE",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "10-selection-of-pipe-type-and-size"
+        },
+        {
+          "title": "INSIDE DIAMETER TABLE FOR PIPE AND TUBE (INCHES)",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "inside-diameter-table-for-pipe-and-tube-inches"
+        },
+        {
+          "title": "Hazen-Williams formula (psi/ft):",
+          "slug": "03-part-1-the-hydraulic-worksheet",
+          "anchor": "hazen-williams-formula-psi-ft"
+        }
+      ]
+    }
+  ]
+}
