@@ -97,8 +97,10 @@ describe('conversion tracking', () => {
   });
 
   it('reports complete only after the Pages deployment succeeds', async () => {
+    const requestedUrls = [];
     global.fetch = vi.fn(async (url) => {
       const target = String(url);
+      requestedUrls.push(target);
       if (target.includes('/convert.yml/runs?')) {
         return response({ workflow_runs: [{
           id: 42,
@@ -123,6 +125,7 @@ describe('conversion tracking', () => {
       if (target.includes('/deploy-pages.yml/runs?')) {
         return response({ workflow_runs: [{
           head_sha: 'result-sha',
+          event: 'workflow_run',
           status: 'completed',
           conclusion: 'success',
           created_at: '2026-07-17T10:10:01Z',
@@ -137,6 +140,8 @@ describe('conversion tracking', () => {
       percent: 100,
       deployUrl: 'https://github.example/deploy/1',
     });
+    expect(requestedUrls.find((url) => url.includes('/deploy-pages.yml/runs?')))
+      .not.toContain('event=push');
   });
 
   it('does not accept a successful deployment for an unrelated commit', async () => {
