@@ -3,6 +3,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { strFromU8, unzipSync } from 'fflate';
 import { BookOverview } from '../../src/components/BookOverview';
 
+const syncBookToObsidianMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../../src/lib/obsidianSync', () => ({
+  syncBookToObsidian: syncBookToObsidianMock,
+}));
+
 function mockFetch() {
   return vi.fn((url) => {
     const value = String(url);
@@ -44,6 +50,11 @@ function mockFetch() {
 
 beforeEach(() => {
   global.fetch = mockFetch();
+  syncBookToObsidianMock.mockReset();
+  syncBookToObsidianMock.mockResolvedValue({
+    changed: true,
+    noteUrl: 'https://github.example/obsidian/note',
+  });
   URL.createObjectURL = vi.fn(() => 'blob:markdown');
   URL.revokeObjectURL = vi.fn();
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
@@ -110,5 +121,31 @@ describe('BookOverview Markdown downloads', () => {
     expect(strFromU8(archive['My Book.md'])).toContain('![Diagram](images/diagram.png)');
     expect([...archive['images/diagram.png']]).toEqual([1, 2, 3]);
     expect(global.fetch).toHaveBeenCalledWith('./books/my-book/images/diagram.png');
+  });
+
+  it('syncs merged Markdown to Obsidian and links to the resulting note', async () => {
+    syncBookToObsidianMock.mockImplementation(async (book, onProgress) => {
+      onProgress({ stage: 'uploading', message: 'Uploading attachments 1/1...', percent: 70 });
+      return {
+        changed: true,
+        noteUrl: 'https://github.example/obsidian/note',
+      };
+    });
+    render(<BookOverview bookId="my-book" onTocLoaded={() => {}} />);
+
+    const button = await screen.findByRole('button', { name: 'Sync to Obsidian' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(syncBookToObsidianMock).toHaveBeenCalledOnce());
+    expect(syncBookToObsidianMock.mock.calls[0][0]).toMatchObject({
+      bookId: 'my-book',
+      title: 'My Book',
+      markdown: '# One\n\n![Diagram](../images/diagram.png)\n\n---\n\n# Two\n',
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Synced to Obsidian.');
+    expect(screen.getByRole('link', { name: 'Open note' })).toHaveAttribute(
+      'href',
+      'https://github.example/obsidian/note',
+    );
   });
 });
