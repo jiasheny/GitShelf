@@ -7,6 +7,7 @@ import {
   mergeChapterMarkdown,
   prepareMarkdownWithImages,
 } from '../lib/bookDownload';
+import { showToast } from '../lib/toast';
 
 function safeFilename(value) {
   return String(value || 'book')
@@ -53,6 +54,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
   const [error, setError] = useState(null);
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [downloadError, setDownloadError] = useState('');
+  const [syncResult, setSyncResult] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +124,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
   async function handleTextDownload() {
     setDownloadProgress({ type: 'text', message: 'Preparing text-only Markdown...', percent: 20 });
     setDownloadError('');
+    setSyncResult(null);
     try {
       const markdown = createTextOnlyMarkdown(await loadMergedMarkdown());
       const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
@@ -136,6 +139,7 @@ export function BookOverview({ bookId, onTocLoaded }) {
   async function handleFullDownload() {
     setDownloadProgress({ type: 'full', message: 'Preparing chapters...', percent: 5 });
     setDownloadError('');
+    setSyncResult(null);
     try {
       const merged = await loadMergedMarkdown();
       const { markdown, imagePaths } = prepareMarkdownWithImages(merged, bookId);
@@ -156,6 +160,38 @@ export function BookOverview({ bookId, onTocLoaded }) {
       saveBlob(await createBookZip(markdown, filename, images), `${filename}.zip`);
     } catch (err) {
       setDownloadError(err.message || 'Download failed.');
+    } finally {
+      setDownloadProgress(null);
+    }
+  }
+
+  async function handleObsidianSync() {
+    setDownloadProgress({ type: 'obsidian', message: 'Preparing book for Obsidian...', percent: 5 });
+    setDownloadError('');
+    setSyncResult(null);
+    try {
+      const markdown = await loadMergedMarkdown();
+      const { syncBookToObsidian } = await import('../lib/obsidianSync');
+      const result = await syncBookToObsidian({
+        bookId,
+        title: tocData.title || bookId,
+        markdown,
+      }, (progress) => {
+        setDownloadProgress({
+          type: 'obsidian',
+          message: progress.message || 'Syncing to Obsidian...',
+          percent: progress.percent ?? 10,
+        });
+      });
+      setSyncResult(result);
+      showToast(
+        result.changed === false ? 'This book is already up to date in Obsidian.' : 'Book synced to Obsidian.',
+        'success',
+      );
+    } catch (err) {
+      const message = err.message || 'Obsidian sync failed.';
+      setDownloadError(message);
+      showToast(message, 'error');
     } finally {
       setDownloadProgress(null);
     }
@@ -182,14 +218,28 @@ export function BookOverview({ bookId, onTocLoaded }) {
           <button class="book-overview-cta btn btn-secondary" type="button" onClick={handleFullDownload} disabled={downloading}>
             Download MD + Images (ZIP)
           </button>
+          <button class="book-overview-cta btn btn-secondary" type="button" onClick={handleObsidianSync} disabled={downloading}>
+            Sync to Obsidian
+          </button>
         </div>
         {downloadProgress && (
           <div class="download-progress" aria-live="polite">
-            <div class="progress-bar" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={downloadProgress.percent}>
+            <div class="progress-bar" role="progressbar" aria-label="Book action progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={downloadProgress.percent}>
               <div class="progress-bar-fill" style={{ width: `${downloadProgress.percent}%` }} />
             </div>
             <p class="progress-text">{downloadProgress.message}</p>
           </div>
+        )}
+        {syncResult && (
+          <p class="status-success" role="status">
+            {syncResult.changed === false ? 'Already up to date in Obsidian.' : 'Synced to Obsidian.'}
+            {' '}
+            {syncResult.noteUrl && (
+              <a class="admin-text-link" href={syncResult.noteUrl} target="_blank" rel="noopener noreferrer">
+                Open note
+              </a>
+            )}
+          </p>
         )}
         {downloadError && <p class="admin-error" role="alert">{downloadError}</p>}
       </div>

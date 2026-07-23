@@ -131,7 +131,7 @@ function AuthView({ repo, onAuthenticated }) {
   return (
     <div class="admin-auth">
       <h2>GitHub Authentication</h2>
-      <p>Use a fine-grained token limited to this repository, with <strong>Contents</strong> and <strong>Actions</strong> read/write access. It is kept only in this page and is forgotten when you reload or close it.</p>
+      <p>Use a fine-grained token with <strong>Contents</strong> and <strong>Actions</strong> read/write access for this repository. To use Obsidian sync, also grant <strong>Contents</strong> read/write access to <strong>jiasheny/obsidian-vault</strong>. The token is kept only in this page and is forgotten when you reload or close it.</p>
       <form onSubmit={handleSubmit}>
         <div class="admin-input-group">
           <input type="password" class="admin-pat-input" value={token} onInput={(e) => setToken(e.target.value)} placeholder="github_pat_…" autocomplete="off" aria-label="GitHub Personal Access Token" />
