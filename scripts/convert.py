@@ -571,13 +571,44 @@ def _split_by_pdf_bookmarks(markdown: str, toc: list[TocEntry]) -> list[Chapter]
     return chapters
 
 
-def _split_chapters(markdown: str, toc: list[TocEntry]) -> list[Chapter]:
-    """Prefer PDF bookmark boundaries, then fall back to H1 splitting."""
+def _split_chapters(
+    markdown: str,
+    toc: list[TocEntry],
+    title: str | None = None,
+) -> list[Chapter]:
+    """Prefer PDF bookmark boundaries, then fall back to heading splitting.
+
+    Heading fallback tries H1, then H2, then H3 (promoting the split level to
+    H1). Documents with no usable headings at all (e.g. scanned drawing sets
+    whose titles OCR as bold text) become a single chapter.
+    """
     if toc:
         chapters = _split_by_pdf_bookmarks(markdown, toc)
         if chapters:
             return chapters
-    return split_by_headings(markdown, level=1)
+
+    for level in (1, 2, 3):
+        try:
+            chapters = split_by_headings(markdown, level=level)
+        except ValueError:
+            continue
+        if level > 1:
+            print(f"  No H1 headings found; splitting chapters on H{level} instead.")
+            for chapter in chapters:
+                chapter.content = _promote_heading_levels(chapter.content, level)
+        return chapters
+
+    chapter_title = (title or "").strip() or "全文"
+    print(f"  No H1-H3 headings found; publishing as a single chapter: {chapter_title}")
+    body = markdown.strip()
+    content = f"# {chapter_title}\n\n{body}" if body else f"# {chapter_title}"
+    return [
+        Chapter(
+            title=chapter_title,
+            slug=_make_bookmark_slug(1, chapter_title),
+            content=content,
+        )
+    ]
 
 
 def _resolve_input_pdf(input_dir: Path, input_filename: str) -> Path:
@@ -653,7 +684,7 @@ def reconvert_from_cache(
     markdown = localize_images(markdown, images_dir, CHAPTER_IMAGES_PREFIX)
     markdown = _rewrite_chapter_image_paths(markdown, book_id)
 
-    chapters = _split_chapters(markdown, toc)
+    chapters = _split_chapters(markdown, toc, title)
     generate_book_structure(book_id, title, chapters, output_dir)
 
     book_dir = output_dir / book_id
@@ -965,7 +996,7 @@ def convert_single_pdf(
     markdown = localize_images(markdown, images_dir, CHAPTER_IMAGES_PREFIX)
     markdown = _rewrite_chapter_image_paths(markdown, book_id)
 
-    chapters = _split_chapters(markdown, toc)
+    chapters = _split_chapters(markdown, toc, title)
     generate_book_structure(book_id, title, chapters, output_dir)
 
     book_dir = output_dir / book_id
@@ -1044,7 +1075,7 @@ def convert_single_docx(docx_path: Path, output_dir: Path) -> None:
     print("  Localizing images...")
     markdown = localize_images(markdown, images_dir, CHAPTER_IMAGES_PREFIX)
     markdown = _rewrite_chapter_image_paths(markdown, book_id)
-    chapters = _split_chapters(markdown, toc)
+    chapters = _split_chapters(markdown, toc, title)
     generate_book_structure(book_id, title, chapters, output_dir)
 
     _write_book_metadata(

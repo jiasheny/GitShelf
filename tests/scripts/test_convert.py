@@ -131,6 +131,26 @@ body 3
 
         self.assertEqual([chapter.title for chapter in chapters], ["Intro", "Next"])
 
+    def test_split_falls_back_to_h2_and_promotes_headings(self) -> None:
+        markdown = "intro\n\n## Alpha\n\n### A.1\n\nbody\n\n## Beta\n\nmore"
+
+        chapters = convert._split_chapters(markdown, [])
+
+        self.assertEqual([c.title for c in chapters], ["Preface", "Alpha", "Beta"])
+        self.assertTrue(chapters[1].content.startswith("# Alpha"))
+        self.assertIn("## A.1", chapters[1].content)
+
+    def test_split_without_headings_yields_single_chapter(self) -> None:
+        markdown = "国家建筑标准设计图集\n\n**建筑给水塑料管道安装**\n\n正文"
+        title = "11S405-2 建筑给水聚烯烃类塑料管道安装"
+
+        chapters = convert._split_chapters(markdown, [], title)
+
+        self.assertEqual(len(chapters), 1)
+        self.assertEqual(chapters[0].title, title)
+        self.assertTrue(chapters[0].content.startswith(f"# {title}\n\n国家建筑标准设计图集"))
+        self.assertTrue(chapters[0].slug.startswith("01"))
+
     def test_heading_fix_merges_adjacent_headings_for_bookmark_match(self) -> None:
         markdown = "# 译者序\n\nbody\n\n# 第1章\n\n# 简介\n\n# 1.1 并发简史"
         toc = [
