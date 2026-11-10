@@ -1,6 +1,21 @@
 {
   "items": [
     {
+      "id": "11s405-2-建筑给水聚烯烃类塑料管道安装",
+      "type": "book",
+      "title": "11S405-2 建筑给水聚烯烃类塑料管道安装",
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "source": "11S405-2 建筑给水聚烯烃类塑料管道安装.pdf",
+      "created_at": "2026-11-10T10:21:50Z",
+      "updated_at": "2026-11-10T10:21:50Z",
+      "chapters_count": 1,
+      "word_count": 3033,
+      "source_format": "markdown-derived"
+    },
+    {
       "id": "fire-firesmoke-dampers-andmaintenance-imeg",
       "type": "book",
       "title": "Fire-FireSmoke-Dampers-andMaintenance-IMEG",

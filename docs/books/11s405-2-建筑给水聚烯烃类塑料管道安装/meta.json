@@ -1,0 +1,13 @@
+{
+  "id": "11s405-2-建筑给水聚烯烃类塑料管道安装",
+  "type": "book",
+  "source": "11S405-2 建筑给水聚烯烃类塑料管道安装.pdf",
+  "source_format": "markdown-derived",
+  "pdf_md5": "5735d23809ebefda75638e939e8a7db9",
+  "page_count": 71,
+  "created_at": "2026-11-10T10:21:50Z",
+  "updated_at": "2026-11-10T10:21:50Z",
+  "conversion_method": "pdf-ocr",
+  "model_version": "vlm",
+  "ocr_used": true
+}

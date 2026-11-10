@@ -1,10 +1,3 @@
 {
-  "failures": [
-    {
-      "filename": "11S405-2 建筑给水聚烯烃类塑料管道安装.pdf",
-      "book_id": "11s405-2-建筑给水聚烯烃类塑料管道安装",
-      "error": "MinerU API error during request upload URL: status=401 url=https://mineru.net/api/v4/file-urls/batch body={\"traceId\":\"ac5b2d706dce\",\"msgCode\":\"A0202\",\"msg\":\"user authenticate failed\",\"data\":null,\"success\":false,\"total\":0}",
-      "failed_at": "2026-11-10T10:04:44Z"
-    }
-  ]
+  "failures": []
 }
