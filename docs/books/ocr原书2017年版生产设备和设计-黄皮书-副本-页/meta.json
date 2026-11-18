@@ -1,0 +1,13 @@
+{
+  "id": "ocr原书2017年版生产设备和设计-黄皮书-副本-页",
+  "type": "book",
+  "source": "OCR原书2017年版生产设备和设计-黄皮书 - 副本_页.pdf",
+  "source_format": "markdown-derived",
+  "pdf_md5": "2086a141083f89664b7403e3c636558d",
+  "page_count": 228,
+  "created_at": "2026-11-18T03:39:13Z",
+  "updated_at": "2026-11-18T03:39:13Z",
+  "conversion_method": "pdf-native-text",
+  "model_version": "pipeline",
+  "ocr_used": false
+}

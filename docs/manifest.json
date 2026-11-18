@@ -61,6 +61,21 @@
       "source_format": "markdown-derived"
     },
     {
+      "id": "ocr原书2017年版生产设备和设计-黄皮书-副本-页",
+      "type": "book",
+      "title": "OCR原书2017年版生产设备和设计-黄皮书 - 副本_页",
+      "author": null,
+      "summary": null,
+      "tags": [],
+      "featured": false,
+      "source": "OCR原书2017年版生产设备和设计-黄皮书 - 副本_页.pdf",
+      "created_at": "2026-11-18T03:39:13Z",
+      "updated_at": "2026-11-18T03:39:13Z",
+      "chapters_count": 1,
+      "word_count": 6583,
+      "source_format": "markdown-derived"
+    },
+    {
       "id": "progit",
       "type": "book",
       "title": "progit",
