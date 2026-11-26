@@ -1,0 +1,49 @@
+{
+  "title": "redirection",
+  "children": [
+    {
+      "title": "Preface",
+      "slug": "00-preface"
+    },
+    {
+      "title": "Stationary Fire Pumps and Standpipe Systems Handbook",
+      "slug": "01-stationary-fire-pumps-and-standpipe-systems-handbook"
+    },
+    {
+      "title": "PDF Navigation Tips",
+      "slug": "02-pdf-navigation-tips"
+    },
+    {
+      "title": "Preface",
+      "slug": "03-preface"
+    },
+    {
+      "title": "Acknowledgments",
+      "slug": "04-acknowledgments"
+    },
+    {
+      "title": "Dedication",
+      "slug": "05-dedication"
+    },
+    {
+      "title": "About the Contributors",
+      "slug": "06-about-the-contributors"
+    },
+    {
+      "title": "About the Editors",
+      "slug": "07-about-the-editors"
+    },
+    {
+      "title": "NFPA 20 and NFPA 14 Summary of Technical Changes",
+      "slug": "08-nfpa-20-and-nfpa-14-summary-of-technical-changes"
+    },
+    {
+      "title": "An Overview of Fire Pump Configurations",
+      "slug": "09-an-overview-of-fire-pump-configurations"
+    },
+    {
+      "title": "NFPA® 20, Standard for the Installation of Stationary Pumps for Fire Protection, with Commentary",
+      "slug": "10-nfpa-20-standard-for-the-installation-of-stationary-pumps-for-fire-protection-with-commentary"
+    }
+  ]
+}
