@@ -3,6 +3,7 @@ import json
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 import zipfile
 from pathlib import Path
@@ -198,7 +199,7 @@ class PdfChunkingTest(unittest.TestCase):
                 patch.object(convert, "CHUNK_CACHE_DIR", cache_dir / "chunks"),
                 patch.object(convert, "MAX_GITHUB_CACHE_FILE_SIZE", len(oversized) - 1),
             ):
-                convert._write_cache("large", oversized, 300, [])
+                convert._write_cache("large", oversized, convert.MAX_PAGES_PER_CHUNK + 1, [])
 
             self.assertEqual((cache_dir / "large.zip").read_bytes(), oversized)
             self.assertTrue((cache_dir / "large.meta.json").exists())
@@ -216,7 +217,7 @@ class PdfChunkingTest(unittest.TestCase):
             ):
                 convert._write_chunk_cache("large", 0, _zip_with_markdown("# One"))
                 convert._write_chunk_cache("large", 1, _zip_with_markdown("# Two"))
-                convert._write_cache("large", oversized, 300, [])
+                convert._write_cache("large", oversized, convert.MAX_PAGES_PER_CHUNK + 1, [])
 
             self.assertFalse((cache_dir / "large.zip").exists())
             self.assertTrue((cache_dir / "large.meta.json").exists())
@@ -228,7 +229,7 @@ class PdfChunkingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             pdf_path = Path(tmp_dir) / "large.pdf"
             doc = convert.fitz.open()
-            for _ in range(201):
+            for _ in range(convert.MAX_PAGES_PER_CHUNK + 1):
                 doc.new_page()
             doc.save(str(pdf_path))
             doc.close()
@@ -358,7 +359,7 @@ class PdfChunkingTest(unittest.TestCase):
                 convert._write_chunk_cache("parent-md5", 0, first, "vlm")
                 convert._write_chunk_cache("parent-md5", 1, second, "vlm")
                 convert._write_cache(
-                    "parent-md5", b"merged-is-too-large", 400, [], model_version="vlm"
+                    "parent-md5", b"merged-is-too-large", 2 * convert.MAX_PAGES_PER_CHUNK, [], model_version="vlm"
                 )
                 cached = convert._read_cache("parent-md5")
 
@@ -463,6 +464,71 @@ class PdfChunkingTest(unittest.TestCase):
             with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
                 self.assertEqual(len([n for n in zf.namelist() if n.endswith(".md")]), 2)
 
+
+    def test_convert_large_pdf_converts_chunks_concurrently_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            chunk_paths = [root / f"chunk-{index}.pdf" for index in range(3)]
+            for chunk_path in chunk_paths:
+                chunk_path.write_bytes(b"%PDF-1.4\n")
+
+            # Every call waits until all three are in flight, so this only
+            # completes when the chunks really run at the same time.
+            barrier = threading.Barrier(3, timeout=5)
+
+            def fake_convert(chunk_path: Path, model_version: str):
+                barrier.wait()
+                name = chunk_path.stem
+                return _zip_with_markdown(f"# {name}"), f"# {name}", {}
+
+            client = Mock()
+            client.convert_pdf.side_effect = fake_convert
+
+            with (
+                patch.object(convert, "_read_chunk_cache", return_value=None),
+                patch.object(convert, "_write_chunk_cache") as write_cache_mock,
+                patch.object(convert, "split_pdf", return_value=chunk_paths),
+                patch.object(convert, "_cleanup_pdf_chunks"),
+                patch.object(convert, "MAX_CONCURRENT_CHUNKS", 3),
+            ):
+                _, markdown, _ = convert._convert_large_pdf(
+                    client, root / "book.pdf", 150, "parent-md5", model_version="pipeline"
+                )
+
+            self.assertEqual(markdown, "# chunk-0\n\n# chunk-1\n\n# chunk-2")
+            self.assertEqual(
+                sorted(call.args[1] for call in write_cache_mock.call_args_list), [0, 1, 2]
+            )
+
+    def test_convert_large_pdf_caches_successes_before_raising_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            chunk_paths = [root / f"chunk-{index}.pdf" for index in range(3)]
+            for chunk_path in chunk_paths:
+                chunk_path.write_bytes(b"%PDF-1.4\n")
+
+            def fake_convert(chunk_path: Path, model_version: str):
+                if chunk_path.stem == "chunk-1":
+                    raise convert.MineruError("upstream exploded")
+                return _zip_with_markdown("# ok"), "# ok", {}
+
+            client = Mock()
+            client.convert_pdf.side_effect = fake_convert
+
+            with (
+                patch.object(convert, "_read_chunk_cache", return_value=None),
+                patch.object(convert, "_write_chunk_cache") as write_cache_mock,
+                patch.object(convert, "split_pdf", return_value=chunk_paths),
+                patch.object(convert, "_cleanup_pdf_chunks") as cleanup_mock,
+            ):
+                with self.assertRaisesRegex(convert.MineruError, r"1 of 3 chunks failed \(chunks 2\)"):
+                    convert._convert_large_pdf(client, root / "book.pdf", 150, "parent-md5")
+
+            self.assertEqual(client.convert_pdf.call_count, 3)
+            self.assertEqual(
+                sorted(call.args[1] for call in write_cache_mock.call_args_list), [0, 2]
+            )
+            cleanup_mock.assert_called_once_with(chunk_paths)
 
 class SmartDocumentRoutingTest(unittest.TestCase):
     def _write_pdf(self, path: Path, native_flags: list[bool]) -> None:
