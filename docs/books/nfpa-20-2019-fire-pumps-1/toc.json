@@ -1,0 +1,20 @@
+{
+  "title": "NFPA-20-2019-Fire-Pumps (1)",
+  "children": [
+    {
+      "title": "Preface",
+      "slug": "00-preface"
+    },
+    {
+      "title": "NFPA 20 - Standard for the Installation of Stationary Pumps for Fire Protection - 2019",
+      "slug": "01-nfpa-20-standard-for-the-installation-of-stationary-pumps-for-fire-protection-2019",
+      "children": [
+        {
+          "title": "Contents",
+          "slug": "01-nfpa-20-standard-for-the-installation-of-stationary-pumps-for-fire-protection-2019",
+          "anchor": "contents"
+        }
+      ]
+    }
+  ]
+}
