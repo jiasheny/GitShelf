@@ -33,6 +33,9 @@ jobs:
     env:
       MINERU_TOKEN: ${{ secrets.MINERU_TOKEN }}
       GITSHELF_CACHE_DIR: cache/markdown
+      # Stream pipeline progress to the job log instead of losing buffered
+      # output when a long conversion is cancelled or times out.
+      PYTHONUNBUFFERED: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

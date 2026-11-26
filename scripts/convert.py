@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unicodedata
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -58,7 +59,11 @@ try:
 except ImportError:
     from localize_images import localize_images
 
-MAX_PAGES_PER_CHUNK = 200
+# Small chunks submitted concurrently: MinerU rate-limits by file count
+# (50 submissions/minute), not pages, so many small files finish far sooner
+# than a few large ones converted one after another.
+MAX_PAGES_PER_CHUNK = 50
+MAX_CONCURRENT_CHUNKS = 8
 PAGE_THRESHOLD = MAX_PAGES_PER_CHUNK
 TEXT_PDF_MODEL = "pipeline"
 OCR_PDF_MODEL = "vlm"
@@ -1171,27 +1176,59 @@ def _convert_large_pdf(
     *,
     model_version: str = OCR_PDF_MODEL,
 ) -> tuple[bytes, str, dict[str, bytes]]:
-    """Split a large PDF into chunks, convert each via MinerU, and concatenate."""
+    """Split a large PDF into chunks, convert them concurrently via MinerU, and concatenate.
+
+    Each finished chunk is cached as soon as it completes, so a failure or a
+    workflow timeout keeps every chunk that already succeeded for the retry.
+    """
     print(f"  Splitting {page_count}-page PDF into ~{MAX_PAGES_PER_CHUNK}-page chunks")
     chunk_paths = split_pdf(pdf_path)
+    total = len(chunk_paths)
 
     try:
+        results: list[tuple[bytes, str, dict[str, bytes]] | None] = [None] * total
+        pending: list[int] = []
+        for index, chunk_path in enumerate(chunk_paths):
+            cached = _read_chunk_cache(parent_md5, index, model_version)
+            if cached:
+                print(f"  Chunk cache hit {index + 1}/{total}: {chunk_path.name}")
+                results[index] = cached
+            else:
+                pending.append(index)
+
+        if pending:
+            workers = min(MAX_CONCURRENT_CHUNKS, len(pending))
+            print(f"  Converting {len(pending)} chunk(s) with {workers} concurrent MinerU task(s)")
+            errors: list[tuple[int, Exception]] = []
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(client.convert_pdf, chunk_paths[index], model_version=model_version): index
+                    for index in pending
+                }
+                for future in as_completed(futures):
+                    index = futures[future]
+                    try:
+                        zip_data, md, images = future.result()
+                    except Exception as exc:  # collected and re-raised once all chunks settle
+                        print(f"  Chunk {index + 1}/{total} failed: {exc}", file=sys.stderr)
+                        errors.append((index, exc))
+                        continue
+                    _write_chunk_cache(parent_md5, index, zip_data, model_version)
+                    results[index] = (zip_data, md, images)
+                    print(f"  Converted chunk {index + 1}/{total}: {chunk_paths[index].name}")
+            if errors:
+                errors.sort(key=lambda item: item[0])
+                failed = ", ".join(str(index + 1) for index, _ in errors)
+                raise MineruError(
+                    f"{len(errors)} of {total} chunks failed (chunks {failed}); "
+                    f"successful chunks are cached for retry. First error: {errors[0][1]}"
+                ) from errors[0][1]
+
         parts: list[str] = []
         all_images: dict[str, bytes] = {}
         all_zips: list[bytes] = []
-        for index, chunk_path in enumerate(chunk_paths):
-            display_index = index + 1
-            cached = _read_chunk_cache(parent_md5, index, model_version)
-            if cached:
-                zip_data, md, images = cached
-                print(f"  Chunk cache hit {display_index}/{len(chunk_paths)}: {chunk_path.name}")
-            else:
-                print(f"  Converting chunk {display_index}/{len(chunk_paths)}: {chunk_path.name}")
-                zip_data, md, images = client.convert_pdf(
-                    chunk_path,
-                    model_version=model_version,
-                )
-                _write_chunk_cache(parent_md5, index, zip_data, model_version)
+        for index, result in enumerate(results):
+            zip_data, md, images = result
             md, images = _namespace_chunk_images(md, images, index)
             parts.append(md)
             all_images.update(images)
